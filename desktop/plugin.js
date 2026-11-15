@@ -205,11 +205,6 @@ function trimCarry(state) {
   return state
 }
 
-/* True once trimming has started, which is the moment the queue stops reading in the
-   order it was offered and starts reading newest first. */
-function carryIsFull(state) {
-  return state.entries.length >= CARRY_LIMIT
-}
 
 /* 1.0.4 stored a bare array with no reply numbers. Give each block the number of
    the first entry that came from it, in log order, so an upgrade keeps its queue
@@ -399,15 +394,16 @@ function clearCarried(sessionId, keepKey) {
    offer itself, oldest first, each with the number of the reply that offered it. */
 function staleFor(sessionId, blockKey) {
   const state = carryState(sessionId)
-  const live = state.entries.filter(function (e) {
-    return !e.gone && e.key !== blockKey
-  })
-  if (!carryIsFull(state)) return live
-  /* At the cap the row is a queue with a memory limit already in force, so it reads
-     newest first: the proposals nearest this reply are the ones still worth a click. */
-  return live.slice().sort(function (a, b) {
-    return (b.n || 0) - (a.n || 0) || (b.i || 0) - (a.i || 0)
-  })
+  /* The youngest reply's proposals sit on top and the oldest sink to the bottom, so the
+     row reads as a queue that empties downward as you work. Chips from the same reply keep
+     the order they were offered in. */
+  return state.entries
+    .filter(function (e) {
+      return !e.gone && e.key !== blockKey
+    })
+    .sort(function (a, b) {
+      return (b.n || 0) - (a.n || 0) || (a.i || 0) - (b.i || 0)
+    })
 }
 
 /* A block's DOM id, so a carried chip can scroll back to where it was offered.

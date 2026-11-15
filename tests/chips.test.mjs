@@ -643,7 +643,7 @@ test('carry: proposals stay inside their own session', () => {
   assert.equal(other, null)
 })
 
-test('carry: the queue is capped, keeps the newest, and reads newest first at the cap', () => {
+test('carry: the queue is capped and keeps the newest options', () => {
   const s = 'carry-cap'
   const many = { carry: '1' }
   for (let i = 1; i <= 33; i += 1) many['q' + i] = 'Option ' + i
@@ -651,8 +651,8 @@ test('carry: the queue is capped, keeps the newest, and reads newest first at th
   const el = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'cap2' }))
   const labels = staleRows(el).map((row) => label(staleButton(row)))
   assert.equal(labels.length, 30, 'keeps 30')
-  assert.equal(labels[0], 'Option 33', 'the newest is shown first at the cap')
-  assert.equal(labels[labels.length - 1], 'Option 4', 'the three oldest were retired')
+  assert.equal(labels[0], 'Option 4', 'the three oldest were retired; one reply keeps its own order')
+  assert.equal(labels[labels.length - 1], 'Option 33')
 })
 
 test('carry: at the cap a recommended proposal is not retired', () => {
@@ -686,9 +686,22 @@ test('carry: once everything is recommended the oldest recommended retires', () 
   assert.equal(labels.length, 30)
   assert.ok(!labels.includes('Option 1'), 'the oldest recommendation retires next')
   assert.ok(labels.includes('Option 33'), 'and the newest recommended is shown')
-  assert.equal(labels[0], 'Option 33')
+  assert.equal(labels[0], 'Option 4', 'one reply keeps its own order')
 })
 
+
+test('carry: the youngest reply sits on top and the oldest sinks to the bottom', () => {
+  const s = 'carry-order'
+  render(register({ attrs: { carry: '1', q1: 'Old A', q2: 'Old B' }, sessionId: s, source: 'r1' }))
+  render(register({ attrs: { carry: '1' }, sessionId: s, source: 'r2' }))
+  render(register({ attrs: { carry: '1', q1: 'Mid A' }, sessionId: s, source: 'r3' }))
+  render(register({ attrs: { carry: '1' }, sessionId: s, source: 'r4' }))
+  const el = render(register({ attrs: { carry: '1', q1: 'Now A' }, sessionId: s, source: 'r5' }))
+  const rows = staleRows(el).map((row) => label(staleButton(row)))
+  assert.deepEqual(rows, ['Mid A', 'Old A', 'Old B'], 'youngest reply first, oldest last, one reply in its own order')
+  const ages = staleRows(el).map(ageText)
+  assert.deepEqual(ages, ['2 responses ago', '4 responses ago', '4 responses ago'])
+})
 
 test('carry: the badge counts replies, not chips', () => {
   const s = 'carry-age'
