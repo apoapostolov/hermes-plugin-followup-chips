@@ -219,7 +219,80 @@ def plan(text: str) -> tuple[str, list[str]] | None:
     return "\n\n".join(head).strip(), options
 
 
-def directive(options: list[str], multi: bool | None = None, rec: str = "") -> str:
+Q_ATTR_RE = re.compile(r"\bq(\d+)\s*=\s*\"([^\"]*)\"")
+
+
+def directive_options(text: str) -> list[str]:
+    """The ``qN`` labels of the reply's directive, in printed order."""
+    if not isinstance(text, str) or not text:
+        return []
+    match = _DIRECTIVE_BODY_RE.search(text)
+    if not match:
+        return []
+    found = [(int(number), value) for number, value in Q_ATTR_RE.findall(match.group(2))]
+    found.sort(key=lambda pair: pair[0])
+    return [value for _, value in found]
+
+
+ALT_GROUP_RE = re.compile(r"alt\s*=\s*\"([^\"]*)\"")
+_MAX_ALT_GROUPS = 6
+
+
+def parse_alternates(value: object, count: int) -> list[list[int]]:
+    """Alternate groups from an ``alt`` attribute or a tool argument.
+
+    Groups are separated by ``|`` and members by commas, 1-based to match the
+    ``qN`` names the model already writes: ``"1,3|2"`` means chip 1 and chip 3
+    exclude each other, and chip 2 is exclusive with nobody. A group needs two
+    distinct members to mean anything, out-of-range numbers are dropped, and the
+    members come back sorted so the same decision always renders the same way.
+    """
+    raw = value
+    if isinstance(raw, str):
+        raw = raw.split("|")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    groups: list[list[int]] = []
+    for item in raw:
+        members = item.split(",") if isinstance(item, str) else item
+        if not isinstance(members, (list, tuple)):
+            continue
+        kept: list[int] = []
+        for member in members:
+            try:
+                number = int(str(member).strip())
+            except (TypeError, ValueError):
+                continue
+            if 1 <= number <= count and number not in kept:
+                kept.append(number)
+        kept.sort()
+        if len(kept) < 2:
+            continue
+        if kept not in groups:
+            groups.append(kept)
+    return groups[:_MAX_ALT_GROUPS]
+
+
+def alternate_attribute(groups: object, count: int) -> str:
+    """The ``alt`` attribute text, or "" when no group means anything."""
+    parsed = parse_alternates(groups, count)
+    return "|".join(",".join(str(n) for n in group) for group in parsed)
+
+
+def merge_alternates(given: object, enforced: object, count: int) -> list[list[int]]:
+    """The model's groups, plus anything the policy insists on.
+
+    A group a model already wrote is kept exactly; an enforced group is added
+    unless it is already present, so calling this twice changes nothing.
+    """
+    groups = parse_alternates(given, count)
+    for group in parse_alternates(enforced, count):
+        if group not in groups:
+            groups.append(group)
+    return groups[:_MAX_ALT_GROUPS]
+
+
+def directive(options: list[str], multi: bool | None = None, rec: str = "", alt: str = "") -> str:
     """The paragraph the renderer reads.
 
     Two or more chips are pickable, so the user can send them as one turn, and that
@@ -247,6 +320,8 @@ def directive(options: list[str], multi: bool | None = None, rec: str = "") -> s
         head = 'multi="0" '
     if rec:
         head += 'rec="{}" '.format(rec)
+    if alt:
+        head += 'alt="{}" '.format(alt)
     return "::followups{" + head + attrs + "}"
 
 
@@ -297,6 +372,41 @@ def session_fingerprint(session: str) -> str:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
     except Exception:  # a hook must never break a reply
         return ""
+
+
+def stamp_alternates(text: str, groups: object, count: int) -> str:
+    """Add alternate groups to the reply's directive without dropping its own.
+
+    The model decides which options exclude each other, but the policy adds one
+    rule it must not lose: an option that means "take none of these" is the
+    alternative to every action, so it cannot sit ticked beside one. Groups the
+    reply already carries are kept, and only missing groups are appended, which
+    makes a second pass a no-op.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+    try:
+        return _DIRECTIVE_BODY_RE.sub(lambda m: _alt_in_body(m, groups, count), text, count=1)
+    except Exception:  # a hook must never break a reply
+        return text
+
+
+def _alt_in_body(match: "re.Match[str]", groups: object, count: int) -> str:
+    body = match.group(2)
+    existing = ALT_GROUP_RE.search(body)
+    merged = merge_alternates(
+        existing.group(1) if existing else "",
+        groups,
+        count,
+    )
+    attr = alternate_attribute(merged, count)
+    if not attr:
+        return match.group(0)
+    if existing:
+        body = body[: existing.start()] + 'alt="%s"' % attr + body[existing.end() :]
+    else:
+        body = 'alt="%s" ' % attr + body
+    return match.group(1) + body + match.group(3)
 
 
 def stamp_steer(text: str) -> str:

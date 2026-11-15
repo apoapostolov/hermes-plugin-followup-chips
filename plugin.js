@@ -432,6 +432,47 @@ function accentOn(value) {
 
 /* rec="1,3" → [0, 2]. 1-based so it lines up with the qN an agent writes; junk,
    zero and out-of-range numbers are dropped instead of trusted. */
+/* alt="1,3|2,4": groups of 1-based chip numbers that exclude each other. The model
+   decides the pairs; the agent half adds the one rule a model often misses (an option
+   meaning "leave it as is" is opposed to every action). Groups come back 0-based,
+   matching the chip indexes the rest of this file uses. */
+function parseAlt(value, count) {
+  if (value == null) return []
+  const raw = typeof value === 'string' ? value.split('|') : value
+  if (!Array.isArray(raw)) return []
+  const groups = []
+  raw.forEach(function (item) {
+    const members = typeof item === 'string' ? item.split(',') : item
+    if (!Array.isArray(members)) return
+    const kept = []
+    members.forEach(function (member) {
+      const n = parseInt(String(member).trim(), 10)
+      if (!isNaN(n) && n >= 1 && n <= count && kept.indexOf(n - 1) === -1) kept.push(n - 1)
+    })
+    kept.sort(function (a, b) {
+      return a - b
+    })
+    if (kept.length < 2) return
+    const same = groups.some(function (g) {
+      return g.length === kept.length && g.every(function (n, i) { return n === kept[i] })
+    })
+    if (!same) groups.push(kept)
+  })
+  return groups
+}
+
+/* The chips this one cannot be sent with: every other member of every group it is in. */
+function alternatesOf(groups, idx) {
+  const out = []
+  groups.forEach(function (group) {
+    if (group.indexOf(idx) === -1) return
+    group.forEach(function (n) {
+      if (n !== idx && out.indexOf(n) === -1) out.push(n)
+    })
+  })
+  return out
+}
+
 function parseRec(value, count) {
   if (value == null) return []
   const raw = Array.isArray(value) ? value : String(value).split(/[\s,;]+/)
@@ -649,7 +690,9 @@ function Chip(props) {
   const accented = props.accent !== false && props.recommended === true
   /* In multi-select nothing is sent on a chip, so an unanswered block keeps
      every chip at full strength; single-select dims the ones you passed over. */
-  const dimmed = multi ? !active : chosen != null && !isChosen
+  const dimmed = multi
+    ? !active || props.excluded === true
+    : chosen != null && !isChosen
   const className =
     'fu-chip' + (marked ? ' fu-chosen' : '') + (isRunning ? ' fu-running' : '') + (accented ? ' fu-recommended' : '')
   /* Three tints, strongest last: hover hints, a recommendation is accented, a
@@ -890,6 +933,9 @@ function Chips(props) {
   )
 
   const rec = parseRec(attrs.rec, qs.length)
+  /* Alternate groups: picking one member clears the others, so a decision with
+     two routes in it can never be sent as both. */
+  const alt = parseAlt(attrs.alt, qs.length)
   const accent = accentOn(attrs.accent)
   /* Recommended options start picked, exactly once. A stored entry or any later
      tick counts as touched, so a user who unticks them is never overruled by the
@@ -1035,7 +1081,12 @@ function Chips(props) {
     const g = group(groupKey)
     if (g.sent) return
     if (g.picked.indexOf(idx) === -1) {
-      g.picked = g.picked.concat([idx]).sort(function (a, b) { return a - b })
+      /* Picking is exclusive inside a group: one route, one time, one way out. */
+      const conflict = alternatesOf(alt, idx)
+      const kept = g.picked.filter(function (n) {
+        return conflict.indexOf(n) === -1
+      })
+      g.picked = kept.concat([idx]).sort(function (a, b) { return a - b })
     } else {
       g.picked = g.picked.filter(function (n) { return n !== idx })
     }
@@ -1064,6 +1115,10 @@ function Chips(props) {
       multi: multi,
       active: active,
       recommended: rec.indexOf(i) !== -1,
+      /* Greyed because a chip it is opposed to is already picked. */
+      excluded: multi && alternatesOf(alt, i).some(function (n) {
+        return picked.indexOf(n) !== -1
+      }),
       accent: accent,
       sessionKey: groupKey,
       onSend: send,

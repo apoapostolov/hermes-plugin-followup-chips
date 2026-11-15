@@ -34,6 +34,20 @@ Add `rec="1,3"` to mark the options a classifier would pick:
 
 Those chips carry a **Recommended** tag and start out ticked, so the reply arrives one click from the steps worth taking. `rec` takes the 1-based `q` numbers, the same numbering the agent already writes.
 
+### Options that exclude each other
+
+A row can hold steps that combine and a pair that does not. `alt` says which ones cannot both be picked:
+
+```
+::followups{alt="1,3|2,3" q1="Force-push the branch" q2="Delete the tag and start over" q3="Leave it as it is"}
+```
+
+Each group is 1-based numbers, groups separated by `|`. Picking a chip clears every other member of its groups, so choosing a route automatically lets go of the one it replaces. A chip a pick has ruled out stays visible and greyed, and clicking it swaps the pick rather than doing nothing. Two groups let one chip be opposed to two others without making those two oppose each other.
+
+The pairs are the model's call, with one rule applied whether or not it says so: an option that means leaving things as they are (`Leave it as it is`, `Not now`, `Wait for review`, `No change`, and the rest of the deferral phrasings) is opposed to every action in the block. That pairing is computed, not requested, because a model that recommends three steps and a "leave it" tends to forget that picking all four is not a decision.
+
+On the tool path the same decision travels as `alternates: [[1, 3]]`, and the implied pairs are merged in before the directive is written.
+
 Every chip in a block shares one width, the width of its longest option, so a row of short actions lines up instead of staggering. `accent="0"` drops the accent tint on the recommended chips and leaves everything else alone.
 
 ```
@@ -221,8 +235,8 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 152 tests: detector, stamps, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 55 cases: renderer, carry queue, cleanup, busy queue, steering, with stub SDK and React
+python -m unittest discover -s tests -t .   # 180 tests: detector, stamps, alternates, recommendation, chip tool, hook, registration
+node tests/chips.test.mjs                   # 61 cases: renderer, carry queue, cleanup, alternates, busy queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

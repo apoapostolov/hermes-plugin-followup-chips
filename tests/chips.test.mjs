@@ -731,7 +731,7 @@ test('steer="1": the click steers the live turn and submits nothing', async () =
   const after = render(register({ attrs: { steer: '1', q1: 'Tighten the rule', q2: 'Leave it' }, sessionId: 'st1', source: 'st-a' }))
   assert.match(chips(after)[0].props.className, /fu-chosen/, 'the click still reads as answered')
   sdk.host.request = null
-  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+  resetHost()
 })
 
 test('steer="1": a rejected steer still reaches the agent as a normal message', async () => {
@@ -746,7 +746,7 @@ test('steer="1": a rejected steer still reaches the agent as a normal message', 
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(lines, [['st2', 'Only step']], 'nothing live took it, so it queues as before')
   sdk.host.request = null
-  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+  resetHost()
 })
 
 test('steer="1": a failing request falls back instead of losing the click', async () => {
@@ -767,7 +767,7 @@ test('steer="1": a failing request falls back instead of losing the click', asyn
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(lines, [['st3', 'A step']], 'the multi send fell back to the composer')
   sdk.host.request = null
-  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+  resetHost()
 })
 
 test('without steer="1" the request door is never used', async () => {
@@ -906,6 +906,81 @@ test('clean: another chat keeps its carried chips', () => {
 
   const otherChat = render(register({ attrs: { carry: '1' }, sessionId: 'clean-other-a', source: 'co-9' }))
   assert.deepEqual(staleLabels(otherChat), ['Mine to keep'], 'a different chat is untouched')
+})
+
+/* ---- alternate options --------------------------------------------------- */
+const ALT = { multi: '1', alt: '1,3', q1: 'Force-push it', q2: 'Add a note', q3: 'Leave as it is' }
+
+test('alt: picking one member clears the other', () => {
+  const el = render(register({ attrs: ALT, sessionId: 'alt-1', source: 'alt-a' }))
+  chips(el)[0].props.onClick()
+  const second = render(register({ attrs: ALT, sessionId: 'alt-1', source: 'alt-a' }))
+  assert.match(chips(second)[0].props.className, /fu-chosen/)
+  chips(second)[2].props.onClick()
+  const third = render(register({ attrs: ALT, sessionId: 'alt-1', source: 'alt-a' }))
+  assert.doesNotMatch(chips(third)[0].props.className, /fu-chosen/, 'the opposite chip let go')
+  assert.match(chips(third)[2].props.className, /fu-chosen/)
+})
+
+test('alt: the chip outside the group keeps its pick', () => {
+  const el = render(register({ attrs: ALT, sessionId: 'alt-2', source: 'alt-b' }))
+  chips(el)[0].props.onClick()
+  const second = render(register({ attrs: ALT, sessionId: 'alt-2', source: 'alt-b' }))
+  chips(second)[1].props.onClick()
+  chips(second)[2].props.onClick()
+  const third = render(register({ attrs: ALT, sessionId: 'alt-2', source: 'alt-b' }))
+  assert.doesNotMatch(chips(third)[0].props.className, /fu-chosen/, 'the opposed chip dropped')
+  assert.match(chips(third)[1].props.className, /fu-chosen/, 'an unrelated chip stays picked')
+  assert.match(chips(third)[2].props.className, /fu-chosen/)
+})
+
+test('alt: one chip opposed to two others clears whichever was picked', () => {
+  const attrs = { multi: '1', alt: '1,3|2,3', q1: 'Ship it', q2: 'Document it', q3: 'Leave as it is' }
+  render(register({ attrs, sessionId: 'alt-3', source: 'alt-c' }))
+  let el = render(register({ attrs, sessionId: 'alt-3', source: 'alt-c' }))
+  chips(el)[1].props.onClick()
+  el = render(register({ attrs, sessionId: 'alt-3', source: 'alt-c' }))
+  chips(el)[2].props.onClick()
+  el = render(register({ attrs, sessionId: 'alt-3', source: 'alt-c' }))
+  assert.doesNotMatch(chips(el)[1].props.className, /fu-chosen/)
+  assert.match(chips(el)[2].props.className, /fu-chosen/)
+  assert.equal(chips(el)[2].props.style.opacity, 1)
+})
+
+test('alt: the chip a pick rules out is greyed but still clickable', () => {
+  const el = render(register({ attrs: ALT, sessionId: 'alt-4', source: 'alt-d' }))
+  chips(el)[2].props.onClick()
+  const after = render(register({ attrs: ALT, sessionId: 'alt-4', source: 'alt-d' }))
+  assert.equal(chips(after)[0].props.style.opacity, 0.72, 'the excluded chip reads as unavailable')
+  assert.equal(chips(after)[1].props.style.opacity, 1, 'the unrelated chip does not')
+  chips(after)[0].props.onClick()
+  const swapped = render(register({ attrs: ALT, sessionId: 'alt-4', source: 'alt-d' }))
+  assert.match(chips(swapped)[0].props.className, /fu-chosen/, 'clicking it swaps the pick')
+  assert.doesNotMatch(chips(swapped)[2].props.className, /fu-chosen/)
+})
+
+test('alt: only the surviving pick is sent', () => {
+  resetHost()
+  submits.length = 0
+  const attrs = { multi: '1', alt: '1,3', q1: 'Force-push it', q2: 'Add a note', q3: 'Leave as it is' }
+  let el = render(register({ attrs, sessionId: 'alt-5', source: 'alt-e' }))
+  chips(el)[0].props.onClick()
+  el = render(register({ attrs, sessionId: 'alt-5', source: 'alt-e' }))
+  chips(el)[2].props.onClick()
+  el = render(register({ attrs, sessionId: 'alt-5', source: 'alt-e' }))
+  send(el).props.onClick()
+  assert.deepEqual(submits, [['alt-5', 'Leave as it is']], 'one route, one line')
+})
+
+test('alt: a group of one, or a number out of range, is ignored', () => {
+  const attrs = { multi: '1', alt: '1|7,8', q1: 'A', q2: 'B' }
+  const el = render(register({ attrs, sessionId: 'alt-6', source: 'alt-f' }))
+  chips(el)[0].props.onClick()
+  const after = render(register({ attrs, sessionId: 'alt-6', source: 'alt-f' }))
+  chips(after)[1].props.onClick()
+  const both = render(register({ attrs, sessionId: 'alt-6', source: 'alt-f' }))
+  assert.match(chips(both)[0].props.className, /fu-chosen/)
+  assert.match(chips(both)[1].props.className, /fu-chosen/, 'nothing was grouped')
 })
 
 test('root plugin.js is byte-identical to desktop/plugin.js', () => {

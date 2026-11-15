@@ -289,5 +289,30 @@ class SteerSettingTest(unittest.TestCase):
         self.assertIn('carry="1"', out or "")
         self.assertIn('multi="1"', out or "")
 
+
+class AlternateRuleTest(unittest.TestCase):
+    """A decision carries its exclusions, even when the model wrote no alt of its own."""
+
+    def hook(self, text, settings=None):
+        ctx = FakeCtx(settings=settings or {})
+        plugin.register(ctx)
+        return ctx.hooks["transform_llm_output"](response_text=text, platform="local", session_id="s1")
+
+    def test_the_deferral_is_marked_opposed_to_the_actions(self):
+        out = self.hook('Done.\n\n::followups{multi="1" q1="Push it" q2="Tag it" q3="Leave as it is"}')
+        self.assertIn('alt="1,3|2,3"', out)
+
+    def test_two_actions_alone_are_left_alone(self):
+        out = self.hook('Done.\n\n::followups{multi="1" q1="Push it" q2="Tag it"}')
+        self.assertNotIn('alt=', out)
+
+    def test_the_models_own_groups_survive(self):
+        out = self.hook('Done.\n\n::followups{alt="1,2" multi="1" q1="Push it" q2="Tag it" q3="Leave it"}')
+        self.assertIn('alt="1,2|1,3|2,3"', out)
+
+    def test_a_reply_without_chips_is_untouched(self):
+        out = self.hook("Just prose, no options.")
+        self.assertIsNone(out)
+
 if __name__ == "__main__":
     unittest.main()

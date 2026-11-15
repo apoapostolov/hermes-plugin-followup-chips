@@ -20,12 +20,20 @@ from .offers import (
     rewrite,
     stamp_accent,
     stamp_carry,
+    directive_options,
+    stamp_alternates,
+    stamp_accent,
     stamp_multi,
     stamp_session,
     stamp_steer,
 )
 from .prompt_section import MAX_CHARS, chips_rule
-from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler, picks_for
+from .recommend import (
+    FOLLOWUP_RECOMMEND_SCHEMA,
+    alternate_groups,
+    handler as recommend_handler,
+    picks_for,
+)
 
 NAME = "followup-chips"
 TOOLSET = NAME.replace("-", "_")
@@ -171,6 +179,14 @@ def register(ctx) -> None:
         # directive means a renderer from before this rule agrees with a new one.
         # Unconditional, so it cannot sit behind an early return for the settings.
         changed = stamp_multi(changed)
+        # The decision implies some exclusions by itself (an option that means
+        # "take none of these" is the alternative to every action), so that rule is
+        # applied to whatever the reply carries, model-written groups included.
+        options = directive_options(changed)
+        if options:
+            enforced = alternate_groups(options)
+            if enforced:
+                changed = stamp_alternates(changed, enforced, len(options))
         if steer:
             changed = stamp_steer(changed)
         if not accent:

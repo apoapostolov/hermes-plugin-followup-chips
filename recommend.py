@@ -71,6 +71,13 @@ NONE_MARKERS = (
     "postpone",
     "leave it",
     "leave that",
+    "leave as",
+    "as it is",
+    "keep as",
+    "keep it",
+    "no change",
+    "unchanged",
+    "status quo",
     "don't",
     "do not",
     "later",
@@ -102,6 +109,28 @@ def is_none_option(option: object) -> bool:
     """Does this option mean "take none of these", a deferral included?"""
     text = " " + str(option or "").casefold() + " "
     return any(marker in text for marker in NONE_MARKERS)
+
+
+def alternate_groups(options: list[str]) -> list[list[int]]:
+    """The alternate pairs a decision implies by itself.
+
+    An option that means "take none of these" is the alternative to every action,
+    not the companion of one: ticking it must clear them, and ticking any of them
+    must clear it. Two actions are never alternates of each other unless the model
+    says so, which is why this returns pairs rather than one group holding
+    everything. The numbers are 1-based, the same numbering the chips show.
+    """
+    numbers = list(range(1, len(options) + 1))
+    deferrals = [number for number, option in zip(numbers, options) if is_none_option(option)]
+    if not deferrals:
+        return []
+    actions = [number for number in numbers if number not in deferrals]
+    groups: list[list[int]] = [
+        sorted([deferral, action]) for deferral in deferrals for action in actions
+    ]
+    if len(deferrals) > 1:
+        groups.append(sorted(deferrals))
+    return groups
 
 
 def state_for(options: list[str], context: str = "") -> str:
