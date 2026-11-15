@@ -106,6 +106,44 @@ class DirectiveTest(unittest.TestCase):
         )
 
 
+class StampAccentTest(unittest.TestCase):
+    """The accent setting rides in the directive: renderer code cannot read settings."""
+
+    def test_it_stamps_a_directive_without_one(self):
+        self.assertEqual(
+            offers.stamp_accent('::followups{multi="1" q1="A" q2="B"}'),
+            '::followups{accent="0" multi="1" q1="A" q2="B"}',
+        )
+
+    def test_it_leaves_an_existing_accent_alone(self):
+        text = '::followups{accent="1" q1="A"}'
+        self.assertEqual(offers.stamp_accent(text), text)
+        text = '::followups{accent="0" q1="A"}'
+        self.assertEqual(offers.stamp_accent(text), text, "idempotent")
+
+    def test_prose_and_other_text_come_back_unchanged(self):
+        for text in ["", None, "No directive here, just prose.", "::blocks{id='x'}"]:
+            self.assertEqual(offers.stamp_accent(text), text)
+
+    def test_it_keeps_the_directive_on_its_own_line(self):
+        text = "Done.\n\n" + offers.directive(["Push it", "Open the PR"])
+        out = offers.stamp_accent(text)
+        self.assertTrue(out.startswith("Done.\n\n::followups{accent=\"0\" "))
+        self.assertTrue(out.endswith("}"))
+
+    def test_a_value_is_sanitised(self):
+        # The value is internal (always "0"), but a stray quote must not break markup.
+        self.assertEqual(
+            offers.stamp_accent('::followups{q1="A"}', '0" x="1'),
+            '::followups{accent="0x1" q1="A"}',
+        )
+        self.assertEqual(
+            offers.stamp_accent('::followups{q1="A"}', '""'),
+            '::followups{accent="0" q1="A"}',
+            "an empty value falls back to the default",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

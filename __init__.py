@@ -12,7 +12,7 @@ desktop-plugins/, where the model emits the directive on its own.
 
 from __future__ import annotations
 
-from .offers import rewrite, stamp_multi
+from .offers import rewrite, stamp_accent, stamp_multi
 from .prompt_section import MAX_CHARS, chips_rule
 from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler
 
@@ -20,6 +20,7 @@ NAME = "followup-chips"
 TOOLSET = NAME.replace("-", "_")
 SETTING = "auto_offers"
 RECOMMEND_SETTING = "auto_recommend"
+ACCENT_SETTING = "accent_recommended"
 # Plugins that register the decision classifier (`nerve_assess`, or the older
 # `jev_assess` name of the same contract).
 RANKER_PLUGINS = ("nerve", "jev")
@@ -84,17 +85,34 @@ def register(ctx) -> None:
     )
 
     def transform(response_text: str = "", platform: str = "", **kwargs) -> str | None:
+        """Two independent jobs, each gated by its own setting, read per call.
+
+        - auto_offers: a closing offer written in prose becomes a directive.
+        - accent_recommended off: the directive gets accent="0", because the
+          renderer cannot read plugin settings and the default is accented.
+        """
         del kwargs
+        if not isinstance(response_text, str) or not response_text:
+            return None
         try:
-            enabled = bool(ctx.get_config(SETTING, False))
+            auto_offers = bool(ctx.get_config(SETTING, False))
         except Exception:  # an unreadable setting must not break a reply
-            enabled = False
-        changed = offer_hook(response_text=response_text, platform=platform, auto_offers=enabled)
-        if changed is None:
-            changed = response_text
+            auto_offers = False
+        try:
+            accent = bool(ctx.get_config(ACCENT_SETTING, True))
+        except Exception:
+            accent = True
+        changed = response_text
+        if auto_offers:
+            converted = offer_hook(response_text=changed, platform=platform, auto_offers=True)
+            if converted:
+                changed = converted
         # Pickability is the default for two or more chips: writing it into the
         # directive means a renderer from before this rule agrees with a new one.
-        stamped = stamp_multi(changed)
-        return stamped if stamped != response_text else None
+        # Unconditional, so it cannot sit behind an early return for the settings.
+        changed = stamp_multi(changed)
+        if not accent:
+            changed = stamp_accent(changed, "0")
+        return changed if changed != response_text else None
 
     ctx.register_hook("transform_llm_output", transform)
