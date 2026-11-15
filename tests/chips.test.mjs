@@ -332,8 +332,10 @@ test('a stored block does not re-seed its recommended picks on reload', () => {
   assert.deepEqual(stored.picked, [0, 1, 2])
 })
 
-test('single select shows the tag but never pre-chooses', () => {
-  const el = render(register({ attrs: { rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'r4', source: 'src-r4' }))
+test('multi="0" shows the tag but never pre-chooses', () => {
+  const el = render(
+    register({ attrs: { multi: '0', rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'r4', source: 'src-r4' })
+  )
   assert.equal(label(chips(el)[1]), 'Tag it', 'no ✓ before a click')
   assert.ok(badge(chips(el)[1]))
   assert.equal(send(el), undefined)
