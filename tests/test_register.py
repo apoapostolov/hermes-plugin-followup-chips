@@ -156,5 +156,27 @@ class RecommendRegistrationTest(unittest.TestCase):
         self.assertIn('rec="1"', out)
 
 
+    def test_without_a_classifier_everything_else_still_works(self):
+        """'Optional' is a promise: no nerve means no tags, and nothing else changes."""
+        ctx = FakeCtx()  # neither nerve nor jev is loaded
+        plugin.register(ctx)
+        rule = ctx.sections[0][1]
+        local = rule({"platform": "local"})
+        self.assertIn("::followups", local)
+        self.assertNotIn("followup_recommend", local)
+        converted = plugin.offer_hook(response_text=OFFER, platform="local", auto_offers=True)
+        self.assertIsNotNone(converted)
+        self.assertIn("::followups", converted)
+        self.assertIn("leave rec out", ctx.tools["followup_recommend"]["handler"]({"options": ["A", "B"]}))
+
+    def test_the_classifier_is_not_declared_as_a_required_plugin(self):
+        # requires_plugins is advisory in Hermes, but an unmet one logs a warning that a
+        # required plugin is missing, which reads as a broken install to anyone who
+        # skipped the classifier on purpose. The probe is runtime, so the manifest stays quiet.
+        for line in (ROOT / "plugin.yaml").read_text(encoding="utf-8").splitlines():
+            if line.startswith("requires_plugins"):
+                self.assertNotIn("nerve", line)
+
+
 if __name__ == "__main__":
     unittest.main()

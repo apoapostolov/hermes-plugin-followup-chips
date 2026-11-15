@@ -1,5 +1,11 @@
 """Which of the offered next steps are worth doing now, from the decision classifier.
 
+This module is the optional part of the plugin. The classifier is the `nerve`
+plugin's `nerve_assess` tool (the older native `jev_assess` contract is accepted
+too); without that plugin nothing here runs, no `rec` attribute is written, and the
+chips render unmarked while everything else keeps working. Nothing in this module
+is imported by the renderer, and nothing about the directive depends on it.
+
 One `nerve_assess` call carries a question per option (up to 16 typed questions on
 one shared state), so five options still cost one provider call of about 200 ms.
 Every option the classifier puts at or above `MIN_TAKE_NOW` is recommended. That is

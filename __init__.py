@@ -75,7 +75,11 @@ def register(ctx) -> None:
         toolset=TOOLSET,
         schema=FOLLOWUP_RECOMMEND_SCHEMA,
         handler=recommend_handler(ctx.dispatch_tool),
-        description="Rank the next steps you are about to offer, for the rec attribute of the chips.",
+        description=(
+            "Rank the next steps you are about to offer, for the rec attribute of the chips. "
+            "Optional: it needs the nerve classifier plugin, and without one it answers "
+            "'leave rec out' so the chips simply go unmarked."
+        ),
         emoji="🎯",
     )
 
