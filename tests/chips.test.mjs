@@ -101,9 +101,28 @@ function render(node) {
 }
 
 function roots(el) {
-  // A chips block is a div whose children are chip buttons plus an optional send button.
+  // A chips block is a div whose children are chip buttons, then an optional footer
+  // row holding the send button and the cleanup. Flattened here so a case can talk
+  // about the block in order without caring which row wraps what.
   assert.equal(el.type, 'div')
-  return el.props.children
+  const out = []
+  for (const child of el.props.children) {
+    if (child && child.props && child.props.className === 'fu-footer') {
+      const inner = child.props.children
+      out.push(...(Array.isArray(inner) ? inner : [inner]))
+    } else out.push(child)
+  }
+  return out
+}
+
+function footerRow(el) {
+  return (el.props.children || []).find((c) => c && c.props && c.props.className === 'fu-footer') || null
+}
+
+function cleanButton(el) {
+  const row = footerRow(el)
+  if (!row) return null
+  return row.props.children.find((c) => c && c.props.className === 'fu-clean') || null
 }
 
 function chips(el) {
@@ -455,6 +474,7 @@ function freshChips(el) {
       c &&
       c.props &&
       typeof c.props.className === 'string' &&
+      c.props.className.indexOf('fu-chip') === 0 &&
       c.props.className.indexOf('fu-stale-row') === -1 &&
       c.props.className.indexOf('fu-send') === -1
   )
@@ -495,6 +515,7 @@ test('carry: a reply that proposes nothing still shows the unanswered chips', ()
   assert.ok(staleRows(el).every((row) => ageBadge(row)), 'every carried chip says how old it is')
   assert.deepEqual(staleRows(el).map(ageText), ['1 response ago', '1 response ago', '1 response ago'])
   assert.equal(freshChips(el).length, 0, 'this reply proposed nothing of its own')
+  assert.ok(cleanButton(el), 'a block showing only carried chips still offers the cleanup')
 })
 
 test('carry: the newest reply shows its own chips first, then the older ones', () => {
@@ -554,8 +575,16 @@ test('carry: the send button sits below the carried chips, not above them', () =
   const classes = (el.props.children || []).filter(Boolean).map(function (c) {
     return c.props.className
   })
-  /* This reply's own chips, then what it carries, then the button that answers them. */
-  assert.deepEqual(classes, ['fu-chip', 'fu-chip', 'fu-stale-row', 'fu-stale-row', 'fu-chip fu-send'])
+  /* This reply's own chips, then what it carries, then the footer: the button that
+     answers them, and the cleanup that ends the row. */
+  assert.deepEqual(classes, ['fu-chip', 'fu-chip', 'fu-stale-row', 'fu-stale-row', 'fu-footer'])
+  const footer = (el.props.children || []).find((c) => c.props.className === 'fu-footer')
+  assert.deepEqual(
+    footer.props.children.map((c) => c.props.className),
+    ['fu-chip fu-send', 'fu-clean'],
+    'the cleanup sits after the send button, pushed to the end of the row'
+  )
+  assert.equal(footer.props.children[1].props.style.marginLeft, 'auto', 'right-aligned in that row')
 })
 
 test('carry: proposals never cross chats when the render prop is empty', () => {
@@ -829,6 +858,54 @@ test('idle with steer="1": plain submit, no steer and no queue entry', async () 
   assert.equal(asked, 0)
   assert.deepEqual(lines, [['q5', 'Just do it']])
   resetHost()
+})
+
+/* ---- cleaning the carried chips ------------------------------------------ */
+test('clean: labelled with an arrow pointing at the chips it clears', () => {
+  const s = 'clean-label'
+  render(register({ attrs: { carry: '1', q1: 'Earlier step' }, sessionId: s, source: 'cl-1' }))
+  const el = render(register({ attrs: { carry: '1', q1: 'Now' }, sessionId: s, source: 'cl-2' }))
+  const button = cleanButton(el)
+  assert.ok(button, 'carried chips offer a cleanup')
+  assert.equal(button.props.children, 'Clean Old Follow-Ups ↓')
+  assert.equal(button.props.type, 'button')
+})
+
+test('clean: absent when nothing is carried', () => {
+  const el = render(
+    register({ attrs: { carry: '1', multi: '0', q1: 'Only mine', q2: 'Also mine' }, sessionId: 'clean-none-yet', source: 'cl-3' })
+  )
+  assert.equal(cleanButton(el), null, 'no carried chips, no cleanup')
+  assert.equal(footerRow(el), null, 'and no footer row to hold one')
+})
+
+test('clean: one click drops every carried chip and keeps this reply own', () => {
+  const s = 'clean-drop'
+  render(register({ attrs: { carry: '1', q1: 'Old A', q2: 'Old B', q3: 'Old C' }, sessionId: s, source: 'cd-1' }))
+  const before = render(register({ attrs: { carry: '1', q1: 'Fresh' }, sessionId: s, source: 'cd-2' }))
+  assert.deepEqual(staleLabels(before), ['Old A', 'Old B', 'Old C'])
+
+  cleanButton(before).props.onClick()
+  const after = render(register({ attrs: { carry: '1', q1: 'Fresh' }, sessionId: s, source: 'cd-2' }))
+  assert.deepEqual(staleLabels(after), [], 'every carried chip is gone')
+  assert.equal(cleanButton(after), null, 'and the cleanup goes with them')
+  assert.deepEqual(freshChips(after).map(label), ['Fresh'], 'this reply keeps its own option')
+
+  /* What this block proposed is still unanswered, so the next reply carries it. */
+  const next = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'cd-3' }))
+  assert.deepEqual(staleLabels(next), ['Fresh'], 'cleaning the old does not answer the new')
+})
+
+test('clean: another chat keeps its carried chips', () => {
+  render(register({ attrs: { carry: '1', q1: 'Mine to keep' }, sessionId: 'clean-other-a', source: 'co-1' }))
+  const mine = render(register({ attrs: { carry: '1', q1: 'Clear me' }, sessionId: 'clean-other-b', source: 'co-2' }))
+  render(register({ attrs: { carry: '1', q1: 'Second in b' }, sessionId: 'clean-other-b', source: 'co-3' }))
+  render(register({ attrs: { carry: '1', q1: 'Another in b' }, sessionId: 'clean-other-b', source: 'co-4' }))
+  const block = render(register({ attrs: { carry: '1' }, sessionId: 'clean-other-b', source: 'co-5' }))
+  cleanButton(block).props.onClick()
+
+  const otherChat = render(register({ attrs: { carry: '1' }, sessionId: 'clean-other-a', source: 'co-9' }))
+  assert.deepEqual(staleLabels(otherChat), ['Mine to keep'], 'a different chat is untouched')
 })
 
 test('root plugin.js is byte-identical to desktop/plugin.js', () => {

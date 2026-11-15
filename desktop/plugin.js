@@ -331,6 +331,23 @@ function retireEntry(sessionId, id) {
   if (changed) persistCarry(sessionId, state)
 }
 
+/* Clean Old Follow-Ups: drop every proposal carried in from earlier replies, in
+   one click. Entries are tombstoned rather than removed, the same way a single
+   dismissal works, so a block still holding an older snapshot cannot bring them
+   back. The block's own proposals keep their place in the queue: this clears what
+   earlier replies left unanswered, not the options on screen. */
+function clearCarried(sessionId, keepKey) {
+  const state = carryState(sessionId)
+  let changed = false
+  state.entries = state.entries.map(function (e) {
+    if (e.gone || e.key === keepKey) return e
+    changed = true
+    return Object.assign({}, e, { gone: true })
+  })
+  if (changed) persistCarry(sessionId, state)
+  return changed
+}
+
 /* What this block draws as carried: everything still unanswered that it did not
    offer itself, oldest first, each with the number of the reply that offered it. */
 function staleFor(sessionId, blockKey) {
@@ -1082,15 +1099,60 @@ function Chips(props) {
 
   /* The send button closes the block, after every row it would send: a carried
      chip sits between this reply's own options and the button that answers them,
-     so the action never appears above entries it does not send. */
+     so the action never appears above entries it does not send.
+
+     When something is carried, the same row also ends with the cleanup: it sits at
+     the far right, past the send button, because it clears what earlier replies
+     left behind rather than anything this block would send. */
+  const footer = []
   if (multi) {
-    rows.push(
+    footer.push(
       jsx(Send, {
         key: 'send',
         sessionKey: groupKey,
         count: picked.length,
         sent: sent,
         onSend: sendPicked,
+      })
+    )
+  }
+  if (stale.length > 0) {
+    footer.push(
+      jsx('button', {
+        key: 'clean',
+        type: 'button',
+        className: 'fu-clean',
+        /* A quiet action, not a chip: it clears rows rather than proposing one. */
+        style: {
+          marginLeft: 'auto',
+          flexShrink: 0,
+          background: 'transparent',
+          border: 'none',
+          padding: '2px 2px 2px 8px',
+          font: 'inherit',
+          fontSize: '11px',
+          lineHeight: '1.5',
+          color: 'var(--ui-text-secondary, var(--muted-foreground, #666))',
+          cursor: 'pointer',
+          textDecoration: 'underline dotted',
+        },
+        title: 'Remove the proposals carried in from earlier replies',
+        'aria-label': 'Clean old follow-ups',
+        onClick: function () {
+          if (clearCarried(carrySession, groupKey)) emit(groupKey)
+        },
+        /* The arrow points at the chips it clears: they are the rows above this one. */
+        children: 'Clean Old Follow-Ups ↓',
+      })
+    )
+  }
+  if (footer.length > 0) {
+    rows.push(
+      jsx('div', {
+        key: 'footer',
+        className: 'fu-footer',
+        style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' },
+        children: footer,
       })
     )
   }

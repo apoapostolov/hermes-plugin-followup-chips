@@ -124,6 +124,8 @@ A reply's chips only exist while that reply is on screen. In a long queued sessi
 
 Picking a chip sends it as the turn and retires it. Picking anything in a block retires that whole block, because a reply you answered is not a proposal any more. The ✕ retires one chip and sends nothing, and the age badge scrolls without sending: the pill, the age and the ✕ are three separate targets, because a label that looks like a link but sends a message is a trap. The count is not an estimate: every reply in a carrying session takes the next number when its chips first mount, the numbers are stored with the queue, and a chip's age is the difference between its reply and the one you are reading. The queue is per session, capped at 30 entries, and survives a window reload; dismissing is permanent, so a reload cannot bring a dropped chip back.
 
+**Clean Old Follow-Ups ↓** ends the row, right-aligned past the send button. One click drops every proposal carried in from earlier replies, which is the difference between clearing a stale queue and pressing ✕ thirty times. It tombstones the entries rather than deleting them, so a reload cannot bring a dropped chip back, and it leaves this reply's own proposals alone: cleaning what was carried does not answer what is on screen. The button only exists when something is carried.
+
 Two mechanics are worth knowing, because both come from the plugin's split halves:
 
 - Renderer code cannot read plugin settings, so the agent half stamps `carry="1"` into the directive.
@@ -212,7 +214,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 
 ```
 python -m unittest discover -s tests -t .   # 152 tests: detector, stamps, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 51 cases: renderer, carry queue, busy queue, steering, with stub SDK and React
+node tests/chips.test.mjs                   # 55 cases: renderer, carry queue, cleanup, busy queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)
