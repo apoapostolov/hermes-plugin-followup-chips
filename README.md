@@ -4,6 +4,8 @@
 
 Clickable follow-up suggestion chips for Hermes desktop replies. 54-second demo: `demo.mp4` (also posted with the contest entry).
 
+Latest release: **[v1.0.11](https://github.com/apoapostolov/hermes-plugin-followup-chips/releases/tag/v1.0.11)** — every feature, the settings table and the install steps on one page.
+
 ## What it does
 
 The agent registers its follow-up options, either by calling the `followup_chips` tool or by ending the reply with a directive:
@@ -204,6 +206,12 @@ Both halves, as one plugin:
 ```
 git clone https://github.com/nuonrg/hermes-plugin-followup-chips
 hermes plugins install ./hermes-plugin-followup-chips
+```
+
+Or install the published release, which needs no checkout:
+
+```
+hermes plugins install apoapostolov/hermes-plugin-followup-chips --enable
 ```
 
 Or by hand: copy the folder to `%LOCALAPPDATA%/hermes/plugins/followup-chips/` and enable it in Settings → Plugins. Then reload the window: `Ctrl+K` opens the command palette, where **Reload window** is the entry. The app has no reload keybind of its own.
