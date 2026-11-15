@@ -271,14 +271,22 @@ function Chip(props) {
           ? jsx('span', {
               key: 'rec',
               style: Object.assign({}, REC_MARK, {
-                /* Darkened against the foreground so the small uppercase text clears
-                   4.5:1 on its own 10% fill (the raw accent measured 4.35:1). */
-                color: 'color-mix(in srgb, ' + primary + ' 76%, var(--foreground, #111) 24%)',
-                background: 'color-mix(in srgb, ' + primary + ' 10%, transparent)',
-                /* Right edge of the pill: with every pill the same width, the tags
-                   line up in one column instead of drifting after each label. */
                 marginLeft: 'auto',
-              }),
+              }, accented
+                ? {
+                    /* Darkened against the foreground so the small uppercase text
+                       clears 4.5:1 on its own 10% fill (the raw accent measured
+                       4.35:1). */
+                    color: 'color-mix(in srgb, ' + primary + ' 76%, var(--foreground, #111) 24%)',
+                    background: 'color-mix(in srgb, ' + primary + ' 10%, transparent)',
+                  }
+                : {
+                    /* accent="0" means no accent anywhere on a recommendation. The tag
+                       goes neutral too, otherwise turning the setting off would be
+                       invisible on a pre-picked chip, where the pick tint dominates. */
+                    color: 'var(--ui-text-secondary, var(--foreground))',
+                    background: 'color-mix(in srgb, var(--ui-stroke-secondary, var(--border)) 55%, transparent)',
+                  }),
               children: 'Recommended',
             })
           : null,

@@ -358,6 +358,16 @@ test('accent="0" drops the tint but keeps the Recommended tag', () => {
   assert.ok(chips(el)[1].props.style.border.includes('ui-stroke-secondary'), 'neutral border')
   assert.equal(chips(el)[1].props.style.background, 'transparent')
   assert.ok(badge(chips(el)[1]), 'the tag stays')
+  assert.ok(
+    badge(chips(el)[1]).style.color.includes('ui-text-secondary'),
+    'the tag goes neutral too: ' + badge(chips(el)[1]).style.color
+  )
+})
+
+test('accent on, the tag carries the accent', () => {
+  const el = render(register({ attrs: { rec: '1', q1: 'A', q2: 'B' }, sessionId: 'p2b', source: 'src-p2b' }))
+  assert.ok(badge(chips(el)[0]).style.color.includes('--dt-primary'), 'accented tag: ' + badge(chips(el)[0]).style.color)
+  assert.equal(badge(chips(el)[0]).style.marginLeft, 'auto', 'tags line up on the right edge')
 })
 
 test('accent accepts the same spellings as multi, and junk leaves it on', () => {
