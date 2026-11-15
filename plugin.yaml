@@ -1,6 +1,6 @@
 name: followup-chips
 label: Follow-up Chips
-version: 1.0.9
+version: 1.0.10
 author: nuonrg
 homepage: https://github.com/nuonrg/hermes-plugin-followup-chips
 description: >
@@ -65,16 +65,10 @@ config_schema:
     default: false
     label: Send chip results as a steer
     description: >
-      While the agent is working, a chip's request goes into the queue as the
-      next turn, and runs when the current one ends. That is always true, with
-      this setting on or off, because a click must never become a request with no
-      turn behind it. With this on, the click also steers the live turn first: the
-      text reaches the agent while it works, as one more instruction on the
-      request in progress. It is the same gateway call the composer's own steer
-      uses; if the live turn refuses it, or nothing live takes it, the queued
-      admission is what runs, so the correction still arrives. Off by default,
-      because steering changes the answer in progress. This reaches the chips by
-      attribute (steer="1"), because renderer code cannot read plugin settings.
+      A chip clicked while the agent is working joins the queue as the next turn,
+      on or off. With this on, it also steers the live turn, so the text lands
+      mid-request; a refused steer falls back to that queued turn. Off by default,
+      because steering changes the answer in progress.
   carry_over:
     type: bool
     default: false
