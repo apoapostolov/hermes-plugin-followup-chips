@@ -99,7 +99,24 @@ function send(el) {
 
 function label(el) {
   const first = el.props.children[0]
-  return first && typeof first === 'object' ? first.props.children : first
+  if (first == null || typeof first !== 'object') return first
+  const inner = first.props.children
+  // A chip label is [tick span, text span]; only what is visible counts, so an
+  // unpicked chip reads as its text and a picked one keeps the ✓.
+  if (Array.isArray(inner)) {
+    return inner
+      .filter((part) => !(part && part.props && part.props.style && part.props.style.visibility === 'hidden'))
+      .map((part) => (part && typeof part === 'object' ? part.props.children : part))
+      .join('')
+  }
+  return inner
+}
+
+function tickReserved(el) {
+  const label = el.props.children[0]
+  const inner = label && label.props && label.props.children
+  if (!Array.isArray(inner)) return false
+  return inner.some((part) => part && part.props && part.props.children === '✓ ')
 }
 
 function badge(el) {
@@ -321,6 +338,59 @@ test('junk rec values are ignored instead of trusted', () => {
     const picked = chips(el).filter((c) => c.props['aria-pressed'] === true)
     assert.ok(picked.length <= 2, 'rec=' + JSON.stringify(rec) + ' picked ' + picked.length)
   }
+})
+
+/* ---- polish: accent tint and one width for the row ---------------------- */
+
+test('a recommended chip is accented by default, even when it is not picked', () => {
+  const el = render(register({ attrs: { rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p1', source: 'src-p1' }))
+  const recommended = chips(el)[1]
+  assert.ok(recommended.props.className.includes('fu-recommended'), 'recommended chip carries the accent class')
+  assert.ok(/color-mix\(in srgb, var\(--dt-primary[\s\S]*70%/.test(recommended.props.style.border), 'accent border: ' + recommended.props.style.border)
+  assert.ok(!chips(el)[0].props.className.includes('fu-recommended'), 'a plain chip is not accented')
+})
+
+test('accent="0" drops the tint but keeps the Recommended tag', () => {
+  const el = render(
+    register({ attrs: { rec: '2', accent: '0', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p2', source: 'src-p2' })
+  )
+  assert.ok(!chips(el)[1].props.className.includes('fu-recommended'), 'no accent class at all')
+  assert.ok(chips(el)[1].props.style.border.includes('ui-stroke-secondary'), 'neutral border')
+  assert.equal(chips(el)[1].props.style.background, 'transparent')
+  assert.ok(badge(chips(el)[1]), 'the tag stays')
+})
+
+test('accent accepts the same spellings as multi, and junk leaves it on', () => {
+  for (const [value, wants] of [['0', false], ['false', false], ['off', false], ['1', true], ['yes', true], ['', true], ['nonsense', true]]) {
+    const attrs = { rec: '1', accent: value, q1: 'A', q2: 'B' }
+    const el = render(register({ attrs, sessionId: 'p3-' + value, source: 'src-p3-' + value }))
+    const accented = chips(el)[0].props.className.includes('fu-recommended')
+    assert.equal(accented, wants, 'accent=' + JSON.stringify(value))
+  }
+})
+
+test('the tick slot is laid out on every chip so a pick cannot resize the row', () => {
+  const el = render(register({ attrs: { multi: '1', q1: 'A', q2: 'B' }, sessionId: 'p4', source: 'src-p4' }))
+  for (const chip of chips(el)) {
+    assert.ok(tickReserved(chip), 'tick span present')
+    assert.equal(label(chip), chip.props.title, 'no ✓ before a pick')
+  }
+  chips(el)[0].props.onClick()
+  const after = render(register({ attrs: { multi: '1', q1: 'A', q2: 'B' }, sessionId: 'p4', source: 'src-p4' }))
+  assert.ok(tickReserved(chips(after)[0]), 'the slot survives the pick')
+  assert.equal(label(chips(after)[0]), '✓ A')
+  assert.equal(label(chips(after)[1]), 'B', 'the other chip keeps its own text')
+})
+
+test('the row is one grid column sized to the widest chip, with Send outside it', () => {
+  const el = render(register({ attrs: { multi: '1', q1: 'A', q2: 'A much longer option' }, sessionId: 'p5', source: 'src-p5' }))
+  assert.equal(el.props.style.display, 'grid')
+  assert.equal(el.props.style.gridTemplateColumns, 'minmax(0, max-content)')
+  for (const chip of chips(el)) {
+    assert.equal(chip.props.style.width, undefined, 'no per-chip width to fight the grid')
+    assert.equal(chip.props.style.boxSizing, 'border-box')
+  }
+  assert.equal(send(el).props.style.justifySelf, 'start', 'Send keeps its own width')
 })
 
 /* ---- report ------------------------------------------------------------- */

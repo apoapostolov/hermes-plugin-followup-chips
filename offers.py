@@ -226,6 +226,37 @@ def directive(options: list[str]) -> str:
     return "::followups{" + multi + attrs + "}"
 
 
+# One directive paragraph, balanced-ish: the renderer takes it to the closing brace.
+_DIRECTIVE_BODY_RE = re.compile(r"(::followups\s*\{)([^}]*)(\})")
+
+
+def stamp_accent(text: str, value: str = "0") -> str:
+    """Put ``accent="<value>"`` into every directive that has no accent attribute.
+
+    The renderer reads the accent as a per-directive preference, because a desktop
+    plugin cannot read its own settings (the SDK exposes no settings surface to
+    renderer code). The agent half knows the setting, so it stamps the off case and
+    leaves the default alone: nothing is added unless the owner turned it off.
+
+    Idempotent, and it never touches prose: no directive means the text comes back
+    unchanged.
+    """
+    if not isinstance(text, str) or not text or not DIRECTIVE_RE.search(text):
+        return text
+    # A whitelist rather than _sane: _sane swaps quotes for apostrophes, which is
+    # fine inside an option but leaves a broken attribute value.
+    safe = re.sub(r"[^0-9a-zA-Z._-]", "", str(value))[:16] or "0"
+    try:
+        return _DIRECTIVE_BODY_RE.sub(
+            lambda m: m.group(1) + m.group(2) + m.group(3)
+            if re.search(r"\baccent\s*=", m.group(2))
+            else m.group(1) + 'accent="{}" '.format(safe) + m.group(2) + m.group(3),
+            text,
+        )
+    except Exception:  # a hook must never break a reply
+        return text
+
+
 def rewrite(text: str, platform: str = "") -> str | None:
     """The hint's own hook: the reply with its closing offer drawn as chips.
 

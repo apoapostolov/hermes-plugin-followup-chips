@@ -146,6 +146,15 @@ function isMulti(value) {
   return /^(1|true|yes|on)$/i.test(String(value).trim())
 }
 
+/* accent="0" drops the recommended tint. Absent means on: the agent half only
+   stamps the attribute when the owner turned the setting off, because renderer
+   code cannot read plugin settings. */
+function accentOn(value) {
+  if (value == null) return true
+  if (value === false) return false
+  return !/^(0|false|no|off)$/i.test(String(value).trim())
+}
+
 /* rec="1,3" → [0, 2]. 1-based so it lines up with the qN an agent writes; junk,
    zero and out-of-range numbers are dropped instead of trusted. */
 function parseRec(value, count) {
@@ -190,11 +199,19 @@ function Chip(props) {
   const [hover, setHover] = useState(false)
   const primary = 'var(--dt-primary, var(--accent, var(--foreground)))'
   const marked = isChosen || isPicked
+  /* A recommended option keeps the accent even when it is not picked, so the
+     suggested steps read as one group. accent="0" (from the plugin setting) drops
+     that tint and leaves the Recommended tag alone. */
+  const accented = props.accent !== false && props.recommended === true
   /* In multi-select nothing is sent on a chip, so an unanswered block keeps
      every chip at full strength; single-select dims the ones you passed over. */
   const dimmed = multi ? !active : chosen != null && !isChosen
   const className =
-    'fu-chip' + (marked ? ' fu-chosen' : '') + (isRunning ? ' fu-running' : '')
+    'fu-chip' + (marked ? ' fu-chosen' : '') + (isRunning ? ' fu-running' : '') + (accented ? ' fu-recommended' : '')
+  /* Three tints, strongest last: hover hints, a recommendation is accented, a
+     pick is the loudest. One scale so the three states never fight. */
+  const stroke = marked ? 75 : accented ? 70 : hover ? 55 : 0
+  const tint = marked ? 14 : accented ? 11 : hover ? 7 : 0
   return jsx(
     'button',
     {
@@ -217,29 +234,39 @@ function Chip(props) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: '8px',
-        border: marked
-          ? '1px solid color-mix(in srgb, ' + primary + ' 55%, transparent)'
-          : hover
-            ? '1px solid color-mix(in srgb, ' + primary + ' 55%, transparent)'
-            : '1px solid var(--ui-stroke-secondary, var(--border))',
+        boxSizing: 'border-box',
+        border: stroke
+          ? '1px solid color-mix(in srgb, ' + primary + ' ' + stroke + '%, transparent)'
+          : '1px solid var(--ui-stroke-secondary, var(--border))',
         borderRadius: '12px',
-        background: marked
-          ? 'color-mix(in srgb, ' + primary + ' 7%, transparent)'
-          : hover
-            ? 'color-mix(in srgb, ' + primary + ' 7%, transparent)'
-            : 'transparent',
-        color: marked || hover ? primary : 'var(--ui-text-secondary, var(--foreground))',
+        background: tint ? 'color-mix(in srgb, ' + primary + ' ' + tint + '%, transparent)' : 'transparent',
+        color: stroke ? primary : 'var(--ui-text-secondary, var(--foreground))',
         opacity: dimmed ? 0.72 : 1,
         padding: '5px 12px',
         fontSize: '0.9em',
         textAlign: 'left',
-        width: 'fit-content',
+        /* No width: the row is a one-column grid sized to its widest chip, so every
+           chip stretches to that width instead of each sizing to its own text. */
         maxWidth: '100%',
         lineHeight: 1.35,
         transition: 'border-color 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease',
       },
       children: [
-        jsx('span', { key: 'label', children: (marked ? '✓ ' : '') + q }),
+        jsx('span', {
+          key: 'label',
+          style: { display: 'inline-flex', alignItems: 'baseline' },
+          children: [
+            /* The tick is always laid out, only hidden when unmarked: reserving it
+               keeps the pill width still when a pick adds the glyph. */
+            jsx('span', {
+              key: 'tick',
+              'aria-hidden': 'true',
+              style: { visibility: marked ? 'visible' : 'hidden' },
+              children: '✓ ',
+            }),
+            jsx('span', { key: 'q', children: q }),
+          ],
+        }),
         props.recommended
           ? jsx('span', {
               key: 'rec',
@@ -248,6 +275,9 @@ function Chip(props) {
                    4.5:1 on its own 10% fill (the raw accent measured 4.35:1). */
                 color: 'color-mix(in srgb, ' + primary + ' 76%, var(--foreground, #111) 24%)',
                 background: 'color-mix(in srgb, ' + primary + ' 10%, transparent)',
+                /* Right edge of the pill: with every pill the same width, the tags
+                   line up in one column instead of drifting after each label. */
+                marginLeft: 'auto',
               }),
               children: 'Recommended',
             })
@@ -290,6 +320,8 @@ function Send(props) {
       title: sent ? 'Sent' : count === 0 ? 'Pick one or more' : 'Send the picked steps as one message',
       style: {
         cursor: disabled ? 'default' : 'pointer',
+        /* Its own width: the row's common width belongs to the pills. */
+        justifySelf: 'start',
         border: '1px solid color-mix(in srgb, ' + primary + ' ' + (disabled ? '28%' : '55%') + ', transparent)',
         borderRadius: '12px',
         background: disabled
@@ -365,6 +397,7 @@ function Chips(props) {
   if (qs.length === 0) return null
 
   const rec = parseRec(attrs.rec, qs.length)
+  const accent = accentOn(attrs.accent)
   /* Recommended options start picked, exactly once. A stored entry or any later
      tick counts as touched, so a user who unticks them is never overruled by the
      defaults coming back on the next render. */
@@ -442,6 +475,7 @@ function Chips(props) {
       multi: multi,
       active: active,
       recommended: rec.indexOf(i) !== -1,
+      accent: accent,
       sessionKey: groupKey,
       onSend: send,
       onToggle: toggle,
@@ -462,9 +496,12 @@ function Chips(props) {
 
   return jsx('div', {
     style: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'flex-start',
+      /* One implicit column sized to the widest chip: every chip stretches to it,
+         so all pills share a width and the narrowest option is not a stub. The
+         single column also means a very long option is capped by the row, and its
+         text wraps inside the pill rather than pushing the row wide. */
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, max-content)',
       gap: '6px',
       margin: '6px 0 2px 0',
     },

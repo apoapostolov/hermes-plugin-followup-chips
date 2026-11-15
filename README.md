@@ -30,6 +30,12 @@ Add `rec="1,3"` to mark the options a classifier would pick:
 
 Those chips carry a **Recommended** tag and start out ticked, so the reply arrives one click from the steps worth taking. `rec` takes the 1-based `q` numbers, the same numbering the agent already writes.
 
+Every chip in a block shares one width, the width of its longest option, so a row of short actions lines up instead of staggering. `accent="0"` drops the accent tint on the recommended chips and leaves everything else alone.
+
+```
+::followups{multi="1" rec="1,3" accent="0" q1="Push the branch" q2="Tag a release"}
+```
+
 ### Interaction model
 
 - **Hover** — Hermes' signature `arc-border` travelling-light ring (two-layer masked ring, themed to `--dt-primary`), subtle tint on border/background, 160 ms fades. Never a plain box-shadow.
@@ -42,6 +48,8 @@ Those chips carry a **Recommended** tag and start out ticked, so the reply arriv
 - **Any count** — `q1..qN` parsed in numeric order, no hard limit. `multi="1"`, `"true"`, `"yes"` and `"on"` all enable multi-select.
 - **Stale-composer guard** — if the chat is no longer open, the click warns instead of sending into the wrong conversation.
 - **Recommended** — `rec="1,3"` tags those chips and, in multi-select, ticks them once. Any tick or a sent block ends the defaults, so un-ticking a recommendation is never undone on the next render, and a reload keeps what you chose.
+- **Equal widths** — the row is one grid column sized to its longest chip, so every pill stretches to that width. A very long option is capped by the row and its text wraps inside the pill. The tick slot is laid out on every chip and only hidden, so picking one does not resize the row.
+- **Accent** — a recommended chip keeps the accent border and tint while it is unpicked, and the tag sits on the pill's right edge, lining up down the column. Picked chips are the strongest tint of the three states (rest, recommended, picked).
 
 ### Recommendations are optional and need the `nerve` plugin
 
@@ -68,6 +76,18 @@ followup_recommend(options=["Push the branch", "Tag a release", "Write the notes
 One `choice` question per option rides in a single classifier call (about 200 ms), so a five-option reply still costs one call. The policy is in code, not in the model: every option at or above **0.5** on "take it now" is recommended, at most 3, weakest dropped first. More than one can clear the bar, which is the point: three steps that all have to happen come back 0.81 / 0.79 / 0.77 and all three are tagged, while a reply with one obvious next step comes back 0.91 / 0.04 / 0.04 and only that one is.
 
 When no classifier is loaded, or the owner turns **Ask the decision classifier which steps to pick** off (`auto_recommend`), the tool answers "leave rec out": no tag, no pre-pick, and nothing else about the reply changes. A classifier error never changes a reply either, so a missing, slow or broken `nerve` costs you a recommendation and never a message.
+
+### The accent setting
+
+**Accent the recommended options** (`accent_recommended`, on by default) is the only setting that has to travel to the renderer, and it travels as an attribute. Renderer code cannot read plugin settings: the desktop SDK exposes no settings surface to a plugin's `plugin.js`, so a toggle alone would be invisible to the chips. The agent half reads the setting on every reply and, when it is off, stamps `accent="0"` into any directive it sees:
+
+```
+::followups{rec="1" q1="Push the branch"}
+↓ accent_recommended off
+::followups{accent="0" rec="1" q1="Push the branch"}
+```
+
+On, nothing is added, because accented is the default. Off, a recommended chip stays on the neutral surface until you pick it and the Recommended tag stays. The hook that does this is the same `transform_llm_output` used by `auto_offers`: both read their setting per reply, so a toggle applies to the next turn rather than the next plugin reload. With `auto_offers` off and the accent on, the hook reads both settings and returns the reply untouched, with no text scan at all.
 
 ## The prompt rule (agent half)
 
@@ -109,7 +129,7 @@ A skill can emit text; it cannot render interactive UI in the transcript, wire c
 - `prompt_section.py` — the chip rule, per surface, with the classifier sentence when one is loaded
 - `offers.py` — the closing-offer detector
 - `recommend.py` — `followup_recommend`: the classifier call and the pick policy
-- `plugin.yaml` — manifest, `provides_tools` / `provides_hooks`, `auto_offers` and `auto_recommend` settings
+- `plugin.yaml` — manifest, `provides_tools` / `provides_hooks`, `auto_offers`, `auto_recommend` and `accent_recommended` settings
 - `tests/` — detector, recommendation and registration tests (Python), renderer harness (Node, no dependencies)
 
 ## Install

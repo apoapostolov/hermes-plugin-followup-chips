@@ -155,6 +155,49 @@ class RecommendRegistrationTest(unittest.TestCase):
         out = ctx.tools["followup_recommend"]["handler"]({"options": ["A", "B"], "context": "x"})
         self.assertIn('rec="1"', out)
 
+    # -- the accent setting travels in the directive -----------------------
+
+    def test_accent_on_adds_nothing_to_a_reply(self):
+        ctx = FakeCtx()
+        plugin.register(ctx)
+        hook = ctx.hooks["transform_llm_output"]
+        self.assertIsNone(hook(response_text='::followups{q1="A"}', platform="local"))
+        self.assertIsNone(hook(response_text=OFFER, platform="local"))
+
+    def test_accent_off_stamps_every_directive_it_sees(self):
+        ctx = FakeCtx(settings={"accent_recommended": False})
+        plugin.register(ctx)
+        hook = ctx.hooks["transform_llm_output"]
+        self.assertEqual(
+            hook(response_text='::followups{rec="1" q1="A"}', platform="local"),
+            '::followups{accent="0" rec="1" q1="A"}',
+        )
+
+    def test_accent_off_still_leaves_prose_alone(self):
+        ctx = FakeCtx(settings={"accent_recommended": False})
+        plugin.register(ctx)
+        hook = ctx.hooks["transform_llm_output"]
+        self.assertIsNone(hook(response_text="Just an answer, no chips.", platform="local"))
+        self.assertIsNone(hook(response_text=OFFER, platform="local"), "auto_offers is off")
+
+    def test_accent_off_and_auto_offers_stamp_the_converted_chips(self):
+        ctx = FakeCtx(settings={"accent_recommended": False, "auto_offers": True})
+        plugin.register(ctx)
+        hook = ctx.hooks["transform_llm_output"]
+        out = hook(response_text=OFFER, platform="local")
+        self.assertIn('::followups{accent="0" ', out)
+        self.assertIn('q1="Open the PR"', out)
+
+    def test_a_broken_setting_store_keeps_the_defaults(self):
+        ctx = FakeCtx()
+
+        def boom(key, default=None):
+            raise RuntimeError("config unreadable")
+
+        ctx.get_config = boom
+        plugin.register(ctx)
+        self.assertIsNone(ctx.hooks["transform_llm_output"](response_text='::followups{q1="A"}', platform="local"))
+
 
     def test_without_a_classifier_everything_else_still_works(self):
         """'Optional' is a promise: no nerve means no tags, and nothing else changes."""
