@@ -224,6 +224,22 @@ function migrateCarry(raw) {
   return state
 }
 
+/* 1.0.7 and earlier wrote every chat without a session id into one bucket named
+   'current'. That name can no longer be produced, so drop it once rather than
+   leave another chat's proposals waiting to be shown. */
+function dropSharedBucket() {
+  if (!storage) return
+  try {
+    const all = storage.get(CARRY_STORAGE, null)
+    if (all && typeof all === 'object' && all.current) {
+      delete all.current
+      storage.set(CARRY_STORAGE, all)
+    }
+  } catch (e) {
+    /* best-effort */
+  }
+}
+
 function carryState(sessionId) {
   if (carryStates.has(sessionId)) return carryStates.get(sessionId)
   let state = emptyCarryState()
@@ -818,8 +834,16 @@ function Chips(props) {
   /* carry="1", stamped by the agent half when Carry Over Old Proposals is on:
      the next reply buries the earlier chips, so this block also draws every
      proposal still unanswered from the replies above it. */
-  const carryOn = isCarry(attrs.carry)
-  const carrySession = sessionId || 'current'
+  /* The session this block belongs to, and never a shared one. `sid` is stamped
+     into the directive by the agent half, which knows the chat id for certain;
+     the render prop is the fallback. Without either, carrying is switched off for
+     this block: a missing key used to mean one bucket called 'current', and every
+     chat wrote its proposals into it, so a chip offered in one chat showed up in
+     another. No queue is better than someone else's queue. */
+  const carrySession =
+    (typeof attrs.sid === 'string' && attrs.sid ? attrs.sid : '') ||
+    (typeof sessionId === 'string' && sessionId ? sessionId : '')
+  const carryOn = isCarry(attrs.carry) && carrySession !== ''
   /* This reply's number in the session, so a carried chip can say how many
      replies ago it was offered and scroll back to the one that offered it. */
   const ourN = carryOn ? carrySequence(carrySession, groupKey) : 0
@@ -1020,6 +1044,7 @@ const plugin = {
   register: function register(ctx) {
     storage = (ctx && ctx.storage) || null
     hydrate()
+    dropSharedBucket()
     const area =
       typeof TRANSCRIPT_DIRECTIVE_AREA === 'string' && TRANSCRIPT_DIRECTIVE_AREA
         ? TRANSCRIPT_DIRECTIVE_AREA
@@ -1027,7 +1052,8 @@ const plugin = {
     if (typeof ctx.onEvent === 'function') {
       /* Settle every block of the session: keys are `<sessionId>::<source>`. */
       const settle = function (sid) {
-        const prefix = (sid || 'current') + '::'
+        if (!sid) return
+        const prefix = sid + '::'
         groups.forEach(function (g, key) {
           if (key.indexOf(prefix) === 0 && g.running) {
             g.running = false

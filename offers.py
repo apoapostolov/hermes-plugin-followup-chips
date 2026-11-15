@@ -13,6 +13,7 @@ untouched (None), never rewritten on a guess.
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 # Surfaces that draw transcript directives: the Desktop app and its local session.
@@ -290,6 +291,49 @@ def stamp_accent(text: str, value: str = "0") -> str:
             else m.group(1) + 'accent="{}" '.format(safe) + m.group(2) + m.group(3),
             text,
         )
+    except Exception:  # a hook must never break a reply
+        return text
+
+
+def session_fingerprint(session: str) -> str:
+    """A short, stable id for one chat, safe to write into the transcript.
+
+    The queue is stored per session, so the block has to know which one it belongs
+    to. The render prop can be empty, and an empty key used to mean one shared
+    bucket that every chat wrote into; this fingerprint removes the guess. Twelve
+    hex characters keep the raw session id out of the reply while still separating
+    chats, and hashing is stable across restarts.
+    """
+    raw = str(session or "").strip()
+    if not raw:
+        return ""
+    try:
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    except Exception:  # a hook must never break a reply
+        return ""
+
+
+def stamp_session(text: str, session: str = "") -> str:
+    """Name the chat in the directive, so carried chips cannot cross chats.
+
+    Applied to every directive this plugin emits, with or without chips: the block
+    that carries proposals is the one that also records them. Idempotent, and it
+    leaves the text alone when there is no session to name, because a made-up key
+    is exactly the leak this prevents.
+    """
+    fingerprint = session_fingerprint(session)
+    if not fingerprint or not isinstance(text, str) or not text:
+        return text
+    if not DIRECTIVE_RE.search(text):
+        return text
+
+    def one(match: "re.Match[str]") -> str:
+        if re.search(r"\bsid\s*=", match.group(2)):
+            return match.group(0)
+        return match.group(1) + 'sid="' + fingerprint + '" ' + match.group(2) + match.group(3)
+
+    try:
+        return _DIRECTIVE_BODY_RE.sub(one, text)
     except Exception:  # a hook must never break a reply
         return text
 

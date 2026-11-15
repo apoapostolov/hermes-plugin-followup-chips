@@ -554,6 +554,31 @@ test('carry: the send button sits below the carried chips, not above them', () =
   assert.deepEqual(classes, ['fu-chip', 'fu-chip', 'fu-stale-row', 'fu-stale-row', 'fu-chip fu-send'])
 })
 
+test('carry: proposals never cross chats when the render prop is empty', () => {
+  /* The shape that leaked: no sessionId prop, one sid per chat, both stamped. */
+  render(register({ attrs: { carry: '1', sid: 'chat-a', q1: 'A1' }, source: 'x1' }))
+  const other = render(register({ attrs: { carry: '1', sid: 'chat-b', q1: 'B1' }, source: 'x2' }))
+  assert.equal(staleRows(other).length, 0, 'chat b carries nothing from chat a')
+
+  const same = render(register({ attrs: { carry: '1', sid: 'chat-a' }, source: 'x3' }))
+  assert.equal(staleRows(same).length, 1, 'chat a still carries its own')
+})
+
+test('carry: a block with no chat identity records and carries nothing', () => {
+  render(register({ attrs: { carry: '1', q1: 'Loose A' }, source: 'n1' }))
+  const el = render(register({ attrs: { carry: '1' }, source: 'n2' }))
+  assert.equal(el, null, 'no identity means no queue, never a shared one')
+})
+
+test('carry: the sid wins over the render prop', () => {
+  /* A stale prop must not pull another chat's queue in. */
+  render(register({ attrs: { carry: '1', sid: 'chat-x', q1: 'X1' }, sessionId: 'prop-1', source: 'y1' }))
+  const other = render(register({ attrs: { carry: '1', sid: 'chat-y' }, sessionId: 'prop-1', source: 'y2' }))
+  assert.equal(other, null, 'chat y draws nothing rather than chat x queue')
+  const same = render(register({ attrs: { carry: '1', sid: 'chat-x' }, sessionId: 'prop-1', source: 'y3' }))
+  assert.equal(staleRows(same).length, 1)
+})
+
 test('carry: a block without the attribute ignores the queue', () => {
   const s = 'carry-off'
   render(register({ attrs: { carry: '1', q1: 'A' }, sessionId: s, source: 'o1' }))

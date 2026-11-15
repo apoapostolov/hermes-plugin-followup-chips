@@ -195,3 +195,45 @@ class PickabilityTest(unittest.TestCase):
         out = offers.stamp_multi('Done.\n\n::followups{rec="1" q1="A" q2="B"}')
         self.assertIn('rec="1"', out)
         self.assertIn('multi="1"', out)
+class SessionScopeTest(unittest.TestCase):
+    """A chat's proposals stay in that chat.
+
+    The queue is stored per session, and the block learns its session from the
+    directive. Before this, a block without a render-prop session wrote into one
+    bucket called 'current', so chips offered in one chat appeared in another.
+    """
+
+    def test_the_fingerprint_is_stable_and_session_specific(self):
+        first = offers.session_fingerprint("local-aaa")
+        self.assertEqual(first, offers.session_fingerprint("local-aaa"))
+        self.assertNotEqual(first, offers.session_fingerprint("local-bbb"))
+        self.assertEqual(len(first), 12)
+
+    def test_no_session_means_no_fingerprint(self):
+        self.assertEqual(offers.session_fingerprint(""), "")
+        self.assertEqual(offers.session_fingerprint(None), "")
+
+    def test_the_stamp_names_the_chat_on_a_block_with_chips(self):
+        out = offers.stamp_session('::followups{carry="1" q1="A" q2="B"}', "local-aaa")
+        self.assertIn('sid="' + offers.session_fingerprint("local-aaa") + '"', out)
+        self.assertIn('q2="B"', out)
+
+    def test_the_stamp_names_the_chat_on_an_empty_block(self):
+        out = offers.stamp_session('::followups{carry="1"}', "local-aaa")
+        self.assertIn("sid=", out)
+
+    def test_the_raw_session_id_never_reaches_the_reply(self):
+        out = offers.stamp_session('::followups{q1="A"}', "local-secret-aaa")
+        self.assertNotIn("local-secret-aaa", out)
+
+    def test_without_a_session_the_text_is_untouched(self):
+        text = '::followups{carry="1"}'
+        self.assertEqual(offers.stamp_session(text, ""), text)
+
+    def test_the_stamp_is_idempotent(self):
+        once = offers.stamp_session('::followups{q1="A"}', "local-aaa")
+        self.assertEqual(offers.stamp_session(once, "local-aaa"), once)
+        self.assertEqual(offers.stamp_session(once, "local-bbb"), once, "an existing stamp wins")
+
+    def test_prose_is_left_alone(self):
+        self.assertEqual(offers.stamp_session("Just a reply.", "local-aaa"), "Just a reply.")

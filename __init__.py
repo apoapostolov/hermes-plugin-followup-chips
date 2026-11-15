@@ -12,7 +12,7 @@ desktop-plugins/, where the model emits the directive on its own.
 
 from __future__ import annotations
 
-from .offers import rewrite, stamp_accent, stamp_carry, stamp_multi
+from .offers import rewrite, stamp_accent, stamp_carry, stamp_multi, stamp_session
 from .prompt_section import MAX_CHARS, chips_rule
 from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler
 
@@ -85,14 +85,18 @@ def register(ctx) -> None:
         emoji="🎯",
     )
 
-    def transform(response_text: str = "", platform: str = "", **kwargs) -> str | None:
-        """Three independent jobs, each gated by its own setting, read per call.
+    def transform(
+        response_text: str = "", platform: str = "", session_id: str = "", **kwargs
+    ) -> str | None:
+        """Four independent jobs, each gated by its own setting, read per call.
 
         - auto_offers: a closing offer written in prose becomes a directive.
         - accent_recommended off: the directive gets accent="0", because the
           renderer cannot read plugin settings and the default is accented.
         - carry_over on: the directive gets carry="1", and a reply with no chips
           gets one empty block so its message still shows the unanswered ones.
+        - always: the session fingerprint goes into the directive, so a chat only
+          ever carries its own proposals.
         """
         del kwargs
         if not isinstance(response_text, str) or not response_text:
@@ -122,6 +126,9 @@ def register(ctx) -> None:
             changed = stamp_accent(changed, "0")
         if carry:
             changed = stamp_carry(changed, platform=platform)
+        # The chat id goes in last, so the empty block carry may have added is
+        # named as well: a block without a session is how proposals leaked.
+        changed = stamp_session(changed, session_id)
         return changed if changed != response_text else None
 
     ctx.register_hook("transform_llm_output", transform)
