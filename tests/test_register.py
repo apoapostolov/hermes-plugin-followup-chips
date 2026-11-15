@@ -314,5 +314,46 @@ class AlternateRuleTest(unittest.TestCase):
         out = self.hook("Just prose, no options.")
         self.assertIsNone(out)
 
+
+class RiskyRuleTest(unittest.TestCase):
+    """The pill is opt-in in both directions: no setting, no mark, whatever the model wrote."""
+
+    def test_a_mark_is_stripped_when_the_setting_is_off(self):
+        ctx = FakeCtx()
+        plugin.register(ctx)
+        out = ctx.hooks["transform_llm_output"](
+            response_text='Done.\n\n::followups{risky="2" multi="1" q1="Tag it" q2="Force-push"}',
+            platform="local",
+            session_id="s1",
+        )
+        self.assertNotIn("risky", out)
+
+    def test_a_mark_survives_when_the_setting_is_on(self):
+        ctx = FakeCtx(settings={"flag_risky": True})
+        plugin.register(ctx)
+        out = ctx.hooks["transform_llm_output"](
+            response_text='Done.\n\n::followups{risky="2" multi="1" q1="Tag it" q2="Force-push"}',
+            platform="local",
+            session_id="s1",
+        )
+        self.assertIn('risky="2"', out)
+
+    def test_the_rule_explains_the_mark_only_when_it_is_on(self):
+        off = FakeCtx()
+        plugin.register(off)
+        off_section = off.sections[0][1]({"platform": "local"})
+        self.assertNotIn("RISKY", off_section)
+
+        on = FakeCtx(settings={"flag_risky": True})
+        plugin.register(on)
+        on_section = on.sections[0][1]({"platform": "local"})
+        self.assertIn("RISKY", on_section)
+        self.assertIn("risk=true", on_section)
+
+    def test_the_rule_stays_the_same_length_off_desktop(self):
+        ctx = FakeCtx(settings={"flag_risky": True})
+        plugin.register(ctx)
+        self.assertNotIn("RISKY", ctx.sections[0][1]({"platform": "telegram"}))
+
 if __name__ == "__main__":
     unittest.main()

@@ -487,6 +487,10 @@ function parseRec(value, count) {
   })
 }
 
+/* The risk pill reads as a caution, not a suggestion: amber, never the accent, so a
+   step that could break something cannot be mistaken for a recommended one. */
+const RISK_TONE = 'var(--ui-warning, #b45309)'
+
 const REC_MARK = {
   fontSize: '0.85em',
   fontWeight: 600,
@@ -754,6 +758,20 @@ function Chip(props) {
             jsx('span', { key: 'q', children: q }),
           ],
         }),
+        props.risky
+          ? jsx('span', {
+              key: 'risk',
+              className: 'fu-risky',
+              title: 'This step can damage something, break something that works, or leave a mess to clean up',
+              style: Object.assign({}, REC_MARK, {
+                marginLeft: '6px',
+                color: RISK_TONE,
+                background: 'color-mix(in srgb, ' + RISK_TONE + ' 12%, transparent)',
+                border: '1px solid color-mix(in srgb, ' + RISK_TONE + ' 35%, transparent)',
+              }),
+              children: 'Risky',
+            })
+          : null,
         props.recommended
           ? jsx('span', {
               key: 'rec',
@@ -936,6 +954,8 @@ function Chips(props) {
   /* Alternate groups: picking one member clears the others, so a decision with
      two routes in it can never be sent as both. */
   const alt = parseAlt(attrs.alt, qs.length)
+  /* risky="1,3": the classifier judged those steps able to damage or break something. */
+  const risky = parseRec(attrs.risky, qs.length)
   const accent = accentOn(attrs.accent)
   /* Recommended options start picked, exactly once. A stored entry or any later
      tick counts as touched, so a user who unticks them is never overruled by the
@@ -1115,6 +1135,7 @@ function Chips(props) {
       multi: multi,
       active: active,
       recommended: rec.indexOf(i) !== -1,
+      risky: risky.indexOf(i) !== -1,
       /* Greyed because a chip it is opposed to is already picked. */
       excluded: multi && alternatesOf(alt, i).some(function (n) {
         return picked.indexOf(n) !== -1

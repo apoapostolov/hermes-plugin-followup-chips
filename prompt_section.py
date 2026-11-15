@@ -52,6 +52,14 @@ OTHER = (
     "numbered list of concrete options instead of an open question."
 )
 
+RISK = (
+    " Mark the options that could do damage rather than just cost time: deleting or "
+    "overwriting something, rewriting published history, spending money, running a "
+    "migration, or a change that could break a working setup. Pass risk=true with the "
+    "chips, or risky=\"2\" on the directive, so those chips carry a RISKY pill; a step "
+    "that is merely slow or incomplete is not risky."
+)
+
 RECOMMEND = (
     " When the chips are a real choice rather than an obvious next step, pass "
     "recommend=true so the decision classifier marks the options worth taking now; they "
@@ -61,7 +69,7 @@ RECOMMEND = (
 )
 
 
-def chips_rule(session: dict, recommends: bool = False) -> str:
+def chips_rule(session: dict, recommends: bool = False, risk: bool = False) -> str:
     """The section's text for one session: the chip rule on the app, text-only elsewhere.
 
     {"platform": "local"} → DESKTOP;  with a classifier → DESKTOP + RECOMMEND;
@@ -69,5 +77,5 @@ def chips_rule(session: dict, recommends: bool = False) -> str:
     """
     session = session or {}
     if session.get("platform") in DRAWS:
-        return DESKTOP + (RECOMMEND if recommends else "")
+        return DESKTOP + (RECOMMEND if recommends else "") + (RISK if risk else "")
     return OTHER

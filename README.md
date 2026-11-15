@@ -34,6 +34,18 @@ Add `rec="1,3"` to mark the options a classifier would pick:
 
 Those chips carry a **Recommended** tag and start out ticked, so the reply arrives one click from the steps worth taking. `rec` takes the 1-based `q` numbers, the same numbering the agent already writes.
 
+### Risky options
+
+Some next steps look harmless and are not: deleting a tag, force-pushing, overwriting a file, running a migration. With **Mark risky options** on, a classifier reads every chip for what it could damage and the ones that clear the bar carry a **Risky** pill in amber, so a destructive step never looks like the safe one beside it.
+
+```
+::followups{risky="2" q1="Tag the release" q2="Force-push the branch"}
+```
+
+The judgement is about harm, not effort: damage to files or data, a broken build, a new bug, money spent, or a mess that needs its own cleanup. A step that is merely slow or incomplete is not risky. Reversibility counts, which is why "delete the tag and start over" reads riskier than "tag the branch" even though both touch the same repository. The bar is 0.6 and the verdict must beat its own safe reading, so a split answer marks nothing: a warning pill on every other chip is noise, and one that appears when nothing is wrong teaches people to ignore it.
+
+Off by default, because the plugin is guessing about consequences and a wrong warning is worse than none. It needs a classifier plugin; without one nothing is marked and the chips behave normally. Turning the setting off also strips the mark from replies that arrive carrying one, so a model cannot leave the pill on by writing the attribute itself.
+
 ### Options that exclude each other
 
 A row can hold steps that combine and a pair that does not. `alt` says which ones cannot both be picked:
@@ -235,8 +247,8 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 180 tests: detector, stamps, alternates, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 61 cases: renderer, carry queue, cleanup, alternates, busy queue, steering, with stub SDK and React
+python -m unittest discover -s tests -t .   # 202 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
+node tests/chips.test.mjs                   # 66 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

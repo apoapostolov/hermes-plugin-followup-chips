@@ -1,6 +1,6 @@
 name: followup-chips
 label: Follow-up Chips
-version: 1.0.12
+version: 1.0.13
 author: nuonrg
 homepage: https://github.com/nuonrg/hermes-plugin-followup-chips
 description: >
@@ -60,6 +60,17 @@ config_schema:
       dark. Turn it off and every chip stays on the neutral surface until you pick
       it; the Recommended tag stays either way. This one reaches the chips by
       attribute (accent="0"), because renderer code cannot read plugin settings.
+  flag_risky:
+    type: bool
+    default: false
+    label: Mark risky options
+    description: >
+      A classifier reads every option for what it could damage: files, a working
+      setup, a build, or money, including the cost of undoing it. Steps above the
+      bar carry a RISKY pill, so a destructive chip is never one careless click
+      away from a safe one. Off by default, because the warning is advice about
+      consequences and a guess about those is worse than none. Needs a classifier
+      plugin; without one nothing is marked.
   send_as_steer:
     type: bool
     default: false

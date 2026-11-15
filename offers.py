@@ -292,7 +292,13 @@ def merge_alternates(given: object, enforced: object, count: int) -> list[list[i
     return groups[:_MAX_ALT_GROUPS]
 
 
-def directive(options: list[str], multi: bool | None = None, rec: str = "", alt: str = "") -> str:
+def directive(
+    options: list[str],
+    multi: bool | None = None,
+    rec: str = "",
+    alt: str = "",
+    risky: str = "",
+) -> str:
     """The paragraph the renderer reads.
 
     Two or more chips are pickable, so the user can send them as one turn, and that
@@ -322,6 +328,8 @@ def directive(options: list[str], multi: bool | None = None, rec: str = "", alt:
         head += 'rec="{}" '.format(rec)
     if alt:
         head += 'alt="{}" '.format(alt)
+    if risky:
+        head += 'risky="{}" '.format(risky)
     return "::followups{" + head + attrs + "}"
 
 
@@ -372,6 +380,29 @@ def session_fingerprint(session: str) -> str:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
     except Exception:  # a hook must never break a reply
         return ""
+
+
+RISKY_ATTR_RE = re.compile(r"risky\s*=\s*\"([^\"]*)\"")
+
+
+def strip_risky(text: str) -> str:
+    """Remove the risky attribute, for when the setting that draws the pill is off.
+
+    The pill is opt-in, so a reply must not carry the mark because a model wrote it:
+    the renderer cannot read settings, and a warning the user switched off would
+    otherwise show up on every chip a model felt unsure about.
+    """
+    if not isinstance(text, str) or "risky" not in text:
+        return text
+    try:
+        return _DIRECTIVE_BODY_RE.sub(lambda m: _without_risky(m), text, count=1)
+    except Exception:
+        return text
+
+
+def _without_risky(match: "re.Match[str]") -> str:
+    body = RISKY_ATTR_RE.sub("", match.group(2))
+    return match.group(1) + body + match.group(3)
 
 
 def stamp_alternates(text: str, groups: object, count: int) -> str:

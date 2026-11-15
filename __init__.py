@@ -17,20 +17,21 @@ from __future__ import annotations
 
 from .chips import FOLLOWUP_CHIPS_SCHEMA, PENDING, attach, handler as chips_handler
 from .offers import (
+    directive_options,
     rewrite,
     stamp_accent,
-    stamp_carry,
-    directive_options,
     stamp_alternates,
-    stamp_accent,
+    stamp_carry,
     stamp_multi,
     stamp_session,
     stamp_steer,
+    strip_risky,
 )
 from .prompt_section import MAX_CHARS, chips_rule
 from .recommend import (
     FOLLOWUP_RECOMMEND_SCHEMA,
     alternate_groups,
+    risky_picks,
     handler as recommend_handler,
     picks_for,
 )
@@ -42,6 +43,7 @@ RECOMMEND_SETTING = "auto_recommend"
 ACCENT_SETTING = "accent_recommended"
 CARRY_SETTING = "carry_over"
 STEER_SETTING = "send_as_steer"
+RISK_SETTING = "flag_risky"
 # Plugins that register the decision classifier (`nerve_assess`, or the older
 # `jev_assess` name of the same contract).
 RANKER_PLUGINS = ("nerve", "jev")
@@ -76,9 +78,9 @@ def _config(ctx, key: str, default):
         return default
 
 
-def section_text(session: dict, recommends: bool = False) -> str:
+def section_text(session: dict, recommends: bool = False, risk: bool = False) -> str:
     """The prompt section for one session (the section is a callable, so this runs per session)."""
-    return chips_rule(session, recommends=recommends)
+    return chips_rule(session, recommends=recommends, risk=risk)
 
 
 def register(ctx) -> None:
@@ -88,7 +90,8 @@ def register(ctx) -> None:
     # The setting is read in the same place, so a toggle applies to the next session.
     def section(session):
         recommends = bool(_config(ctx, RECOMMEND_SETTING, True)) and has_ranker(ctx)
-        return section_text(session, recommends=recommends)
+        risk = bool(_config(ctx, RISK_SETTING, False))
+        return section_text(session, recommends=recommends, risk=risk)
 
     ctx.register_system_prompt_section(NAME, section, max_chars=MAX_CHARS)
 
@@ -115,11 +118,22 @@ def register(ctx) -> None:
     def classify(options, context_line):
         return picks_for(ctx.dispatch_tool, options, context_line)
 
+    # The risky pill is opt-in, read per call like every other setting, and it needs a
+    # classifier: without one nothing is marked, because a guess about damage is worse
+    # than no warning at all.
+    def wants_risk() -> bool:
+        return bool(_config(ctx, RISK_SETTING, False)) and has_ranker(ctx)
+
+    def classify_risk(options, context_line):
+        return risky_picks(ctx.dispatch_tool, options, context_line)
+
     ctx.register_tool(
         name="followup_chips",
         toolset=TOOLSET,
         schema=FOLLOWUP_CHIPS_SCHEMA,
-        handler=chips_handler(PENDING, ctx.dispatch_tool, classify, wants_recommend),
+        handler=chips_handler(
+            PENDING, ctx.dispatch_tool, classify, wants_recommend, classify_risk, wants_risk
+        ),
         description=(
             "Register the chips under the reply you are about to write, instead of writing "
             "a ::followups directive. Options are validated; the chips attach to that reply "
@@ -182,6 +196,8 @@ def register(ctx) -> None:
         # The decision implies some exclusions by itself (an option that means
         # "take none of these" is the alternative to every action), so that rule is
         # applied to whatever the reply carries, model-written groups included.
+        if not _config(ctx, RISK_SETTING, False):
+            changed = strip_risky(changed)
         options = directive_options(changed)
         if options:
             enforced = alternate_groups(options)

@@ -118,7 +118,7 @@ class Pending:
         self._ttl = ttl
         self._clock = clock
         self._lock = threading.Lock()
-        self._entries: dict[str, tuple[float, list[str], bool | None, str, str]] = {}
+        self._entries: dict[str, tuple[float, list[str], bool | None, str, str, str]] = {}
 
     def put(
         self,
@@ -127,31 +127,32 @@ class Pending:
         multi: bool | None = None,
         rec: str = "",
         alt: str = "",
+        risky: str = "",
     ) -> None:
         key = str(session_id or "")
         with self._lock:
-            self._entries[key] = (self._clock(), list(options), multi, rec, alt)
+            self._entries[key] = (self._clock(), list(options), multi, rec, alt, risky)
 
     def has(self, session_id: str) -> bool:
         return self._fresh(session_id) is not None
 
-    def take(self, session_id: str) -> tuple[list[str], bool | None, str, str] | None:
+    def take(self, session_id: str) -> tuple[list[str], bool | None, str, str, str] | None:
         """Pop the registration, or None when there is none or it has expired."""
         key = str(session_id or "")
         with self._lock:
             entry = self._entries.pop(key, None)
         if entry is None:
             return None
-        created, options, multi, rec, alt = entry
+        created, options, multi, rec, alt, risky = entry
         if self._clock() - created > self._ttl:
             return None
-        return options, multi, rec, alt
+        return options, multi, rec, alt, risky
 
     def forget(self, session_id: str) -> None:
         with self._lock:
             self._entries.pop(str(session_id or ""), None)
 
-    def _fresh(self, session_id: str) -> tuple[float, list[str], bool | None, str, str] | None:
+    def _fresh(self, session_id: str) -> tuple[float, list[str], bool | None, str, str, str] | None:
         key = str(session_id or "")
         with self._lock:
             entry = self._entries.get(key)
@@ -183,8 +184,8 @@ def attach(text: str, session_id: str, platform: str = "", pending: Pending | No
     entry = store.take(session_id)
     if entry is None:
         return None
-    options, multi, rec, alt = entry
-    return text.rstrip() + "\n\n" + directive(options, multi=multi, rec=rec, alt=alt)
+    options, multi, rec, alt, risky = entry
+    return text.rstrip() + "\n\n" + directive(options, multi=multi, rec=rec, alt=alt, risky=risky)
 
 
 FOLLOWUP_CHIPS_SCHEMA = {
@@ -230,6 +231,14 @@ FOLLOWUP_CHIPS_SCHEMA = {
                 "items": {"type": "array", "items": {"type": "integer"}, "minItems": 2},
                 "maxItems": 6,
             },
+            "risky": {
+                "type": "boolean",
+                "description": (
+                    "Ask the classifier which of these options could damage something and "
+                    "mark them. Defaults to the plugin's Mark Risky Options setting, which "
+                    "is off; without a classifier nothing is marked."
+                ),
+            },
             "recommend": {
                 "type": "boolean",
                 "description": (
@@ -249,7 +258,14 @@ FOLLOWUP_CHIPS_SCHEMA = {
 }
 
 
-def handler(store: Pending, dispatch=None, recommend_picks=None, wants_recommend=None):
+def handler(
+    store: Pending,
+    dispatch=None,
+    recommend_picks=None,
+    wants_recommend=None,
+    risk_picks=None,
+    wants_risk=None,
+):
     """The tool handler: validate, optionally classify, register, answer the model."""
 
     def followup_chips(params: dict, session_id: str = "", **kwargs) -> str:
@@ -278,11 +294,25 @@ def handler(store: Pending, dispatch=None, recommend_picks=None, wants_recommend
         # option meaning "take none of these" cannot be sent beside an action.
         groups = merge_alternates(params.get("alternates"), implied_alternates(options), len(options))
         alt = alternate_attribute(groups, len(options))
-        store.put(session_id, options, multi, rec, alt)
+        risky = ""
+        declared = params.get("risky")
+        if isinstance(declared, bool):
+            want_risk = declared
+        else:
+            want_risk = bool(wants_risk()) if callable(wants_risk) else False
+        if want_risk and callable(risk_picks):
+            try:
+                numbers = risk_picks(options, str(params.get("context") or ""))
+            except Exception:  # no classifier, no pill; the chips are unaffected
+                numbers = []
+            risky = rec_attribute(numbers, len(options))
+        store.put(session_id, options, multi, rec, alt, risky)
         shape = "multi" if multi is not False else "one choice"
         detail = "%d options (%s)" % (len(options), shape)
         if alt:
             detail += ", alternates %s" % alt
+        if risky:
+            detail += ", risky %s" % risky
         if rec:
             detail += ", recommended %s" % rec
         elif wanted:

@@ -37,6 +37,12 @@ import json
 # nerve plugin registers; `jev_assess` is the older native name of the same contract.
 RANKERS = ("nerve_assess", "jev_assess")
 
+RISKY = "risky"
+SAFE = "safe"
+# A marked step tells the user to be careful, so the bar is high: a coin toss is
+# not a warning, and a pill on every second chip is noise rather than advice.
+MIN_RISKY = 0.6
+
 TAKE_NOW = "take it now"
 LATER = "later"
 SKIP = "skip"
@@ -92,6 +98,19 @@ ANSWER_INSTRUCTIONS = (
     "one that defers, waits or undoes the other is not 'take it now' unless the user clearly "
     "prefers it. Do not mark two alternatives both."
 )
+
+RISK_INSTRUCTIONS = (
+    "Judge only the chance of harm from taking this step: damage to files, data or a "
+    "working setup; broken builds or tests; new bugs; spending money; or a mess that needs "
+    "its own cleanup afterwards. A step that is merely slow, tedious or incomplete is not "
+    "risky. Reversibility counts: a step that can be undone in one command is not the same "
+    "as one that cannot be undone at all."
+)
+
+RISK_CRITERIA = {
+    RISKY: "Taking it could damage something, break something that works, cost money, or leave a mess that needs its own fix.",
+    SAFE: "Taking it is contained or reversible; if it goes wrong, nothing else is harmed.",
+}
 
 NONE_INSTRUCTIONS = (
     "This candidate means taking none of the others. It earns 'take it now' only when the user "
@@ -168,6 +187,74 @@ def questions(options: list[str]) -> dict[str, dict]:
             "instructions": "\n".join(lines),
             "criteria": dict(CRITERIA),
         }
+    return out
+
+
+def risk_state_for(options: list[str], context: str = "") -> str:
+    """The shared state for a risk pass: the goal, then the candidates numbered."""
+    goal = str(context or "").strip() or DEFAULT_STATE
+    numbered = "\n".join("%d. %s" % (index + 1, option) for index, option in enumerate(options))
+    return (
+        "%s\n\nThe candidate next steps, numbered as the chips will show them:\n%s\n\n"
+        "Several candidates can be safe. Judge each one separately for what it could break."
+        % (goal, numbered)
+    )
+
+
+def risk_questions(options: list[str]) -> dict[str, dict]:
+    """One typed risk question per option, each naming its siblings."""
+    count = len(options)
+    out: dict[str, dict] = {}
+    for index, option in enumerate(options):
+        others = ["%d (%s)" % (other + 1, options[other]) for other in range(count) if other != index]
+        lines = [
+            "Option %d of %d: %s" % (index + 1, count, option),
+            "The other options: %s" % ("; ".join(others) if others else "none"),
+            RISK_INSTRUCTIONS,
+        ]
+        out["q%d" % (index + 1)] = {
+            "type": "choice",
+            "instructions": "\n".join(lines),
+            "criteria": dict(RISK_CRITERIA),
+        }
+    return out
+
+
+def _ask_risk(dispatch, clean: list[str], context: str) -> dict | None:
+    args = {"state": risk_state_for(clean, context), "questions": risk_questions(clean)}
+    for name in RANKERS:
+        try:
+            answers = _answers_from(dispatch(name, args))
+        except Exception:  # a missing classifier costs the pill, never the reply
+            continue
+        if answers:
+            return answers
+    return None
+
+
+def risky_picks(dispatch, options: list[str], context: str = "") -> list[int]:
+    """The 1-based options whose risk clears the bar, empty when none or no classifier.
+
+    A pill that says "be careful" has to mean it: the risky verdict is only used when
+    it clears MIN_RISKY and beats its own safe reading, so a split answer marks
+    nothing rather than warning about everything.
+    """
+    clean = [str(option).strip() for option in options if str(option).strip()][:MAX_OPTIONS]
+    if len(clean) < 2:
+        return []
+    answers = _ask_risk(dispatch, clean, context)
+    if not answers:
+        return []
+    out: list[int] = []
+    for index in range(len(clean)):
+        question = answers.get("q%d" % (index + 1))
+        risk = _probabilities(question, RISKY)
+        safe = _probabilities(question, SAFE)
+        if risk is None or risk < MIN_RISKY:
+            continue
+        if safe is not None and safe >= risk:
+            continue
+        out.append(index + 1)
     return out
 
 

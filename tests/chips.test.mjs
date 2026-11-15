@@ -983,6 +983,60 @@ test('alt: a group of one, or a number out of range, is ignored', () => {
   assert.match(chips(both)[1].props.className, /fu-chosen/, 'nothing was grouped')
 })
 
+/* ---- risky options ------------------------------------------------------- */
+function marksOf(chip) {
+  return (chip.props.children || []).filter(
+    (k) => k && k.props && (k.props.className === 'fu-risky' || k.props.className === 'fu-recommended' || k.props.className === 'fu-tag')
+  )
+}
+
+function markTexts(chip) {
+  /* The recommended tag renders without a className; identify it by its text. */
+  const spans = (chip.props.children || []).filter(
+    (k) => k && k.props && typeof k.props.children === 'string' && k.props.style && k.props.style.textTransform === 'uppercase'
+  )
+  return new Map(spans.map((k) => [k.props.className || 'tag', k.props.children]))
+}
+
+test('risky: the marked chip carries the pill', () => {
+  const attrs = { multi: '1', risky: '2', q1: 'Tag it', q2: 'Force-push the branch' }
+  const el = render(register({ attrs, sessionId: 'risk-1', source: 'risk-a' }))
+  assert.equal(markTexts(chips(el)[1]).get('fu-risky'), 'Risky', 'the risky chip is marked')
+  assert.equal(markTexts(chips(el)[0]).get('fu-risky'), undefined, 'the safe one is not')
+})
+
+test('risky: the pill reads as a caution, not the accent', () => {
+  const attrs = { multi: '1', risky: '1', q1: 'Delete the tag', q2: 'Add a note' }
+  const el = render(register({ attrs, sessionId: 'risk-2', source: 'risk-b' }))
+  const pill = marksOf(chips(el)[0]).find((k) => k.props.className === 'fu-risky')
+  assert.ok(pill, 'pill rendered')
+  assert.match(String(pill.props.style.color), /warning/, 'amber, never the accent')
+  assert.match(pill.props.title, /damage|break/)
+})
+
+test('risky: a chip can be both recommended and risky', () => {
+  const attrs = { multi: '1', risky: '1', rec: '1', q1: 'Force-push it', q2: 'Leave as it is' }
+  const el = render(register({ attrs, sessionId: 'risk-3', source: 'risk-c' }))
+  const marks = markTexts(chips(el)[0])
+  assert.equal(marks.get('fu-risky'), 'Risky')
+  assert.equal(marks.get('tag'), 'Recommended')
+})
+
+test('risky: the mark does not stop a click', () => {
+  resetHost()
+  submits.length = 0
+  const attrs = { multi: '0', risky: '1', q1: 'Force-push it', q2: 'Leave as it is' }
+  const el = render(register({ attrs, sessionId: 'risk-4', source: 'risk-d' }))
+  chips(el)[0].props.onClick()
+  assert.deepEqual(submits, [['risk-4', 'Force-push it']], 'a marked chip still sends')
+})
+
+test('risky: no attribute, no pill', () => {
+  const el = render(register({ attrs: { multi: '1', q1: 'A', q2: 'B' }, sessionId: 'risk-5', source: 'risk-e' }))
+  assert.equal(markTexts(chips(el)[0]).get('fu-risky'), undefined)
+  assert.equal(markTexts(chips(el)[1]).get('fu-risky'), undefined)
+})
+
 test('root plugin.js is byte-identical to desktop/plugin.js', () => {
   const root = readFileSync(resolve(here, '..', 'plugin.js'), 'utf8')
   const desktop = readFileSync(pluginSource, 'utf8')
