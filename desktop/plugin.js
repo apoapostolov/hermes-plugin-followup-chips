@@ -892,14 +892,21 @@ function Chips(props) {
   const sent = sentOf(groupKey)
   const active = multi ? !sent : snapshot(groupKey) == null
 
-  /* Hand the text to the app, steering the live turn when the setting asks for it.
+  /* Send the text the way the moment calls for.
 
-     `session.steer` is the same gateway call the composer's own steer makes, and the
-     desktop protocol fills in the execution generation. It answers `queued` when a
-     running turn took the text, and `rejected` when nothing live could: rejected
-     means "queue it as the next prompt" in the wire contract, so the text is
-     submitted the ordinary way rather than dropped. Every failure lands on that
-     fallback for the same reason. */
+     On an idle chat, submit starts a turn. While the chat is working, submit is
+     NOT the queue: it follows the composer's busy route, which steers or
+     interrupts the running turn, and a chip that silently changes the answer in
+     progress, or lands as a request with no turn behind it, is worse than a late
+     one. So a busy chat gets a real admission into the durable gateway FIFO
+     (`prompt.submit`, which always admits with mode `queue`): the click becomes
+     the next turn and runs when the current one ends.
+
+     With steer="1" the live turn is asked first (`session.steer`, the same call
+     the composer's steer makes). Its wire contract reads `rejected` as "not
+     corrected, queue it as the next prompt", and every other refusal or error
+     means the same thing, so the queue admission is the floor: a click is never
+     left as text that triggers nothing. */
   function deliver(text, done) {
     var submit = host && host.composer && host.composer.submit
     function ordinary() {
@@ -907,7 +914,20 @@ function Chips(props) {
       if (ok) done()
       else if (host && host.notify) host.notify({ kind: 'warning', message: 'Open that chat to continue' })
     }
-    if (!steerOn || sessionId == null || sessionId === '' || !host || typeof host.request !== 'function') {
+    var request = host && host.request
+    var sid = sessionId != null && sessionId !== '' ? sessionId : null
+    if (sid === null) {
+      ordinary()
+      return
+    }
+    var busy = false
+    try {
+      var busyAtom = host && host.state && host.state.busyBySession
+      busy = Boolean(busyAtom && typeof busyAtom.get === 'function' && busyAtom.get()[sid])
+    } catch (e) {
+      busy = false
+    }
+    if (!busy) {
       ordinary()
       return
     }
@@ -918,16 +938,40 @@ function Chips(props) {
       if (ok) done()
       else ordinary()
     }
+    function queue() {
+      if (typeof request !== 'function') {
+        finish(false)
+        return
+      }
+      var id = 'followup-chips-' + Date.now().toString(36) + '-' + Math.random().toString(16).slice(2, 8)
+      try {
+        Promise.resolve(request('prompt.submit', { session_id: sid, text: text, submission_id: id }))
+          .then(function (res) {
+            var failed = res && (res.ok === false || res.status === 'error' || res.status === 'rejected')
+            finish(!failed)
+          })
+          .catch(function () {
+            finish(false)
+          })
+      } catch (e) {
+        finish(false)
+      }
+    }
+    if (!steerOn) {
+      queue()
+      return
+    }
     try {
-      Promise.resolve(host.request('session.steer', { session_id: sessionId, text: text }))
+      Promise.resolve(request('session.steer', { session_id: sid, text: text }))
         .then(function (res) {
-          finish(Boolean(res && res.status === 'queued'))
+          if (res && res.status === 'queued' && res.delivered !== false) finish(true)
+          else queue()
         })
         .catch(function () {
-          finish(false)
+          queue()
         })
     } catch (e) {
-      finish(false)
+      queue()
     }
   }
 

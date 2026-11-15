@@ -30,7 +30,7 @@ pkg('@hermes/plugin-sdk', {
   'index.js': [
     "export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directives'",
     '// The test mutates this object the way the app would provide it.',
-    'export const host = { composer: { submit: () => false }, notify: () => {}, request: null }',
+    'export const host = { composer: { submit: () => false }, notify: () => {}, request: null, state: null }',
   ].join('\n'),
 })
 
@@ -751,6 +751,84 @@ test('without steer="1" the request door is never used', async () => {
   assert.equal(asked, 0)
   assert.deepEqual(submits, [['st4', 'Normal']])
   sdk.host.request = null
+})
+
+/* ---- the busy queue ------------------------------------------------------ */
+function busyIn(sessionId, on) {
+  sdk.host.state = { busyBySession: { get: () => ({ [sessionId]: on }) } }
+}
+function resetHost(submit) {
+  sdk.host.state = null
+  sdk.host.request = null
+  sdk.host.composer.submit = submit || ((sessionId, text) => { submits.push([sessionId, text]); return true })
+}
+
+test('busy: the click is admitted to the queue, not steered or interrupted', async () => {
+  const calls = []
+  const lines = []
+  sdk.host.request = (method, params) => { calls.push([method, params]); return Promise.resolve({ status: 'queued' }) }
+  sdk.host.composer.submit = (sid, text) => { lines.push([sid, text]); return true }
+  busyIn('q1', true)
+  const el = render(register({ attrs: { q1: 'Do the next thing' }, sessionId: 'q1', source: 'q-a' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], 'prompt.submit')
+  assert.equal(calls[0][1].session_id, 'q1')
+  assert.equal(calls[0][1].text, 'Do the next thing')
+  assert.match(calls[0][1].submission_id, /^followup-chips-/, 'the admission carries its own id')
+  assert.equal(lines.length, 0, 'a busy click does not go through the composer busy route')
+  const after = render(register({ attrs: { q1: 'Do the next thing' }, sessionId: 'q1', source: 'q-a' }))
+  assert.match(chips(after)[0].props.className, /fu-chosen/)
+  resetHost()
+})
+
+test('busy with steer="1": the live turn is steered and nothing is queued', async () => {
+  const calls = []
+  sdk.host.request = (method, params) => { calls.push([method, params]); return Promise.resolve({ status: 'queued' }) }
+  busyIn('q2', true)
+  const el = render(register({ attrs: { steer: '1', q1: 'Tighten it' }, sessionId: 'q2', source: 'q-b' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(calls.map((c) => c[0]), ['session.steer'])
+  resetHost()
+})
+
+test('busy with steer="1": a rejected steer still reaches the queue', async () => {
+  const calls = []
+  sdk.host.request = (method, params) => { calls.push([method, params]); return Promise.resolve({ status: 'rejected', delivered: false }) }
+  busyIn('q3', true)
+  const el = render(register({ attrs: { steer: '1', q1: 'Tighten it' }, sessionId: 'q3', source: 'q-c' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(calls.map((c) => c[0]), ['session.steer', 'prompt.submit'], 'the queue is the floor')
+  resetHost()
+})
+
+test('busy: a refused admission falls back to submit instead of losing the click', async () => {
+  const lines = []
+  sdk.host.request = () => Promise.reject(new Error('no subscription'))
+  sdk.host.composer.submit = (sid, text) => { lines.push([sid, text]); return true }
+  busyIn('q4', true)
+  const el = render(register({ attrs: { q1: 'Still here' }, sessionId: 'q4', source: 'q-d' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(lines, [['q4', 'Still here']])
+  resetHost()
+})
+
+test('idle with steer="1": plain submit, no steer and no queue entry', async () => {
+  let asked = 0
+  const lines = []
+  sdk.host.request = () => { asked += 1; return Promise.resolve({ status: 'queued' }) }
+  sdk.host.composer.submit = (sid, text) => { lines.push([sid, text]); return true }
+  busyIn('q5', false)
+  const el = render(register({ attrs: { steer: '1', q1: 'Just do it' }, sessionId: 'q5', source: 'q-e' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(asked, 0)
+  assert.deepEqual(lines, [['q5', 'Just do it']])
+  resetHost()
 })
 
 test('root plugin.js is byte-identical to desktop/plugin.js', () => {
