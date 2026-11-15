@@ -206,9 +206,9 @@ git clone https://github.com/nuonrg/hermes-plugin-followup-chips
 hermes plugins install ./hermes-plugin-followup-chips
 ```
 
-Or by hand: copy the folder to `%LOCALAPPDATA%/hermes/plugins/followup-chips/` and enable it in Settings → Plugins. Reload with `Ctrl+R`.
+Or by hand: copy the folder to `%LOCALAPPDATA%/hermes/plugins/followup-chips/` and enable it in Settings → Plugins. Then reload the window: `Ctrl+K` opens the command palette, where **Reload window** is the entry. The app has no reload keybind of its own.
 
-Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOCALAPPDATA%/hermes/desktop-plugins/followup-chips/plugin.js` and reload.
+Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOCALAPPDATA%/hermes/desktop-plugins/followup-chips/plugin.js` and reload the window the same way.
 
 ## Tests
 
