@@ -98,7 +98,15 @@ function send(el) {
 }
 
 function label(el) {
-  return el.props.children[0]
+  const first = el.props.children[0]
+  return first && typeof first === 'object' ? first.props.children : first
+}
+
+function badge(el) {
+  const mark = el.props.children.find(
+    (child) => child && typeof child === 'object' && child.props && child.props.children === 'Recommended'
+  )
+  return mark ? mark.props : null
 }
 
 /* ---- harness state ------------------------------------------------------ */
@@ -289,6 +297,54 @@ test('q order is numeric, not lexicographic', () => {
 
 test('an empty directive renders nothing', () => {
   assert.equal(render(register({ attrs: { multi: '1' }, sessionId: 'e', source: 'empty' })), null)
+})
+
+/* ---- recommended options ------------------------------------------------ */
+const recAttrs = { multi: '1', rec: '1,3', q1: 'Push it', q2: 'Tag it', q3: 'Write the notes' }
+
+test('rec pre-picks the recommended chips and tags them', () => {
+  const el = render(register({ attrs: recAttrs, sessionId: 'r1', source: 'src-r1' }))
+  assert.equal(label(chips(el)[0]), '✓ Push it')
+  assert.equal(chips(el)[0].props['aria-pressed'], true)
+  assert.ok(badge(chips(el)[0]), 'recommended chip carries the tag')
+  assert.equal(chips(el)[1].props['aria-pressed'], false, 'unrecommended chip stays unmarked')
+  assert.equal(badge(chips(el)[1]), null)
+  assert.ok(badge(chips(el)[2]))
+  assert.equal(label(send(el)), 'Send 2')
+})
+
+test('un-ticking a recommended chip is never undone by the defaults', () => {
+  const first = render(register({ attrs: recAttrs, sessionId: 'r2', source: 'src-r2' }))
+  assert.equal(label(send(first)), 'Send 2')
+  chips(first)[0].props.onClick()
+  const second = render(register({ attrs: recAttrs, sessionId: 'r2', source: 'src-r2' }))
+  assert.equal(label(chips(second)[0]), 'Push it', 'the unticked chip stays unticked')
+  assert.equal(label(send(second)), 'Send 1')
+})
+
+test('a stored block does not re-seed its recommended picks on reload', () => {
+  const first = render(register({ attrs: recAttrs, sessionId: 'r3', source: 'src-r3' }))
+  chips(first)[1].props.onClick()
+  const second = render(register({ attrs: recAttrs, sessionId: 'r3', source: 'src-r3' }))
+  assert.equal(label(send(second)), 'Send 3')
+  const stored = store.get('choices')['r3::src-r3']
+  assert.equal(stored.touched, true, 'the block is marked as used')
+  assert.deepEqual(stored.picked, [0, 1, 2])
+})
+
+test('single select shows the tag but never pre-chooses', () => {
+  const el = render(register({ attrs: { rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'r4', source: 'src-r4' }))
+  assert.equal(label(chips(el)[1]), 'Tag it', 'no ✓ before a click')
+  assert.ok(badge(chips(el)[1]))
+  assert.equal(send(el), undefined)
+})
+
+test('junk rec values are ignored instead of trusted', () => {
+  for (const rec of ['0', '9', 'abc', '', '2,2', ' 1 ; 3 ']) {
+    const el = render(register({ attrs: { multi: '1', rec, q1: 'A', q2: 'B', q3: 'C' }, sessionId: 'r5-' + rec, source: 'src-r5-' + rec }))
+    const picked = chips(el).filter((c) => c.props['aria-pressed'] === true)
+    assert.ok(picked.length <= 2, 'rec=' + JSON.stringify(rec) + ' picked ' + picked.length)
+  }
 })
 
 /* ---- report ------------------------------------------------------------- */

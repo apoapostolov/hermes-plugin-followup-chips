@@ -24,6 +24,14 @@ Add `multi="0"` for a genuinely exclusive choice, where one click sends and pick
 
 A single chip carries no attribute: there is nothing to pick, so it sends on one click.
 
+Add `rec="1,3"` to mark the options a classifier would pick:
+
+```
+::followups{multi="1" rec="1,3" q1="Push the branch" q2="Tag a release" q3="Write the notes"}
+```
+
+Those chips carry a **Recommended** tag and start out ticked, so the reply arrives one click from the steps worth taking. `rec` takes the 1-based `q` numbers, the same numbering the agent already writes.
+
 ### Interaction model
 
 - **Hover** — Hermes' signature `arc-border` travelling-light ring (two-layer masked ring, themed to `--dt-primary`), subtle tint on border/background, 160 ms fades. Never a plain box-shadow.
@@ -35,6 +43,20 @@ A single chip carries no attribute: there is nothing to pick, so it sends on one
 - **Per-block isolation** — every `::followups` block is keyed `sessionId::directive-source`, so a new block always starts blank and never inherits an earlier choice.
 - **Any count** — `q1..qN` parsed in numeric order, no hard limit. A block with two or more chips is pickable by default; `multi="1"`, `"true"`, `"yes"` and `"on"` say so explicitly, and `"0"`, `"false"`, `"no"` and `"off"` opt out.
 - **Stale-composer guard** — if the chat is no longer open, the click warns instead of sending into the wrong conversation.
+- **Recommended** — `rec="1,3"` tags those chips and, in multi-select, ticks them once. Any tick or a sent block ends the defaults, so un-ticking a recommendation is never undone on the next render, and a reload keeps what you chose.
+
+## Recommended options (agent half)
+
+`rec` is a plain attribute: anything that writes the directive can set it. The bundled `followup_recommend` tool fills it from the decision classifier (the `nerve` plugin's `nerve_assess`, or the older `jev_assess` name of the same contract):
+
+```
+followup_recommend(options=["Push the branch", "Tag a release", "Write the notes"], context="Apo asked for the release to go out")
+→ Recommended 1 of 3: 1 (0.91). Write rec="1" into the directive.
+```
+
+One `choice` question per option rides in a single classifier call (about 200 ms), so a five-option reply still costs one call. The policy is in code, not in the model: every option at or above **0.5** on "take it now" is recommended, at most 3, weakest dropped first. More than one can clear the bar, which is the point: three steps that all have to happen come back 0.81 / 0.79 / 0.77 and all three are tagged, while a reply with one obvious next step comes back 0.91 / 0.04 / 0.04 and only that one is.
+
+When no classifier is loaded, or the owner turns **Ask the decision classifier which steps to pick** off (`auto_recommend`), the tool answers "leave rec out" and the chips render unmarked. A classifier error never changes the reply.
 
 ## The prompt rule (agent half)
 
@@ -72,11 +94,12 @@ A skill can emit text; it cannot render interactive UI in the transcript, wire c
 
 - `desktop/plugin.js` — the renderer (default export `{ id, register }`), the copy the manifest entrypoints
 - `plugin.js` — the same file for single-file installs; `tests/chips.test.mjs` fails if the two drift
-- `__init__.py` — the agent half: the prompt section and the optional `transform_llm_output` hook
-- `prompt_section.py` — the chip rule, per surface
+- `__init__.py` — the agent half: the prompt section, the recommend tool, the optional `transform_llm_output` hook
+- `prompt_section.py` — the chip rule, per surface, with the classifier sentence when one is loaded
 - `offers.py` — the closing-offer detector
-- `plugin.yaml` — manifest, `provides_hooks`, `auto_offers` setting
-- `tests/` — detector and hook tests (Python), renderer harness (Node, no dependencies)
+- `recommend.py` — `followup_recommend`: the classifier call and the pick policy
+- `plugin.yaml` — manifest, `provides_tools` / `provides_hooks`, `auto_offers` and `auto_recommend` settings
+- `tests/` — detector, recommendation and registration tests (Python), renderer harness (Node, no dependencies)
 
 ## Install
 
@@ -94,7 +117,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # detector, hook, registration
+python -m unittest discover -s tests -t .   # detector, recommendation, hook, registration
 node tests/chips.test.mjs                   # renderer, with stub SDK and React
 ```
 
@@ -112,6 +135,7 @@ description: >-
 repo: https://github.com/nuonrg/hermes-plugin-followup-chips
 sha: <40-char commit SHA of the pinned release>
 capabilities:
+  provides_tools: [followup_recommend]
   provides_hooks: [transform_llm_output]
 ```
 
