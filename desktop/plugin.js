@@ -186,10 +186,18 @@ function trimCarry(state) {
       }
     }
     if (idx === -1) {
-      /* Entries are appended in time order, so the first unmarked one is the oldest. */
+      /* Entries are appended in time order, so the first one in the lowest tier is the
+         oldest of that tier. A proposal stored before the flag existed is unknown, not
+         unmarked: it is kept ahead of one the classifier cleared, because an upgrade must
+         not retire something that may have been recommended. */
       idx = out.findIndex(function (e) {
-        return !e.rec
+        return e.rec === false
       })
+      if (idx === -1) {
+        idx = out.findIndex(function (e) {
+          return e.rec == null
+        })
+      }
     }
     out.splice(idx === -1 ? 0 : idx, 1)
   }
@@ -306,6 +314,19 @@ function registerProposals(sessionId, blockKey, labels, n, recommended) {
   const entries = state.entries.slice()
   let changed = false
   const marked = Array.isArray(recommended) ? recommended : []
+  /* A block that renders again brings its verdict with it, which is how an entry stored
+     before 1.0.14 gets its flag back: the directive is still in the transcript, so the
+     answer is recoverable rather than guessed. */
+  entries.forEach(function (e) {
+    if (e.key !== blockKey || e.rec === true) return
+    if (marked.indexOf(e.i) !== -1) {
+      e.rec = true
+      changed = true
+    } else if (e.rec == null) {
+      e.rec = false
+      changed = true
+    }
+  })
   labels.forEach(function (label, i) {
     const id = blockKey + '#' + i
     const seen = entries.some(function (e) {

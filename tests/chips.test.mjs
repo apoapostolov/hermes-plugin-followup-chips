@@ -1019,6 +1019,54 @@ test('alt: a group of one, or a number out of range, is ignored', () => {
   assert.match(chips(both)[1].props.className, /fu-chosen/, 'nothing was grouped')
 })
 
+/* ---- 1.0.14 backfill: entries stored before the flag existed --------------- */
+function seedLegacy(sessionId, blockKey, labels) {
+  const all = store.get('carried') || {}
+  all[sessionId] = {
+    v: 2,
+    next: 2,
+    blocks: { [blockKey]: 1 },
+    entries: labels.map((label, i) => ({ id: blockKey + '#' + i, key: blockKey, i, label, n: 1, gone: false })),
+  }
+  store.set('carried', all)
+}
+
+test('carry: an entry stored before the flag is kept ahead of a confirmed unmarked one', () => {
+  const s = 'legacy-keep'
+  const labels = []
+  for (let i = 1; i <= 30; i += 1) labels.push('Old ' + i)
+  seedLegacy(s, s + '::legacy-src', labels)
+  const fresh = { carry: '1', q1: 'New A', q2: 'New B', q3: 'New C' }
+  const el = render(register({ attrs: fresh, sessionId: s, source: 'legacy-new' }))
+  const rows = staleRows(el).map((row) => label(staleButton(row)))
+  assert.equal(rows.length, 30)
+  assert.ok(rows.includes('Old 1'), 'an unknown verdict is not the first thing to go')
+  assert.ok(!rows.includes('New A'), 'the new unmarked options are retired first')
+})
+
+test('carry: a block that renders again gives its old entries their verdict back', () => {
+  const s = 'legacy-upgrade'
+  const key = s + '::same-src'
+  const labels = []
+  for (let i = 1; i <= 30; i += 1) labels.push('Old ' + i)
+  seedLegacy(s, key, labels)
+  const attrs = { carry: '1', rec: '1' }
+  labels.forEach((label, i) => {
+    attrs['q' + (i + 1)] = label
+  })
+  render(register({ attrs, sessionId: s, source: 'same-src' }))
+  const stored = store.get('carried')[s].entries
+  assert.equal(stored[0].rec, true, 'the verdict from the live directive is written back')
+  assert.equal(stored[1].rec, false, 'and the neighbours are cleared, not left unknown')
+  const el = render(
+    register({ attrs: { carry: '1', q1: 'A', q2: 'B', q3: 'C', q4: 'D', q5: 'E' }, sessionId: s, source: 'other' })
+  )
+  const rows = staleRows(el).map((row) => label(staleButton(row)))
+  assert.ok(rows.includes('Old 1'), 'the recommendation recovered from the transcript survives')
+  assert.ok(!rows.includes('Old 2'), 'its unmarked neighbours go first')
+  assert.ok(!rows.includes('Old 6'))
+})
+
 /* ---- risky options ------------------------------------------------------- */
 function marksOf(chip) {
   return (chip.props.children || []).filter(
