@@ -314,6 +314,18 @@ class AlternateRuleTest(unittest.TestCase):
         out = self.hook("Just prose, no options.")
         self.assertIsNone(out)
 
+    def test_a_deferral_in_the_middle_is_moved_to_the_end(self):
+        ctx = FakeCtx()
+        plugin.register(ctx)
+        out = ctx.hooks["transform_llm_output"](
+            response_text='Done.\n\n::followups{alt="1,3" multi="1" q1="Force-push it" q2="Leave it as it is" q3="Delete the tag"}',
+            platform="local",
+            session_id="s1",
+        )
+        self.assertIn('q1="Force-push it"', out)
+        self.assertIn('q2="Delete the tag"', out, "the two actions sit together")
+        self.assertIn('q3="Leave it as it is"', out, "and the deferral closes the row")
+
 
 class RiskyRuleTest(unittest.TestCase):
     """The pill is opt-in in both directions: no setting, no mark, whatever the model wrote."""

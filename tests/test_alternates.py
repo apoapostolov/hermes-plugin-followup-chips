@@ -96,5 +96,61 @@ class ImpliedTest(unittest.TestCase):
             )
 
 
+class OrderTest(unittest.TestCase):
+    """Alternates sit together, and the option that means "leave it" closes the row."""
+
+    def test_no_groups_means_no_change(self):
+        self.assertEqual(offers.alternate_order([], 3), [1, 2, 3])
+
+    def test_a_cluster_pulls_together(self):
+        # 1 and 3 exclude each other, 2 does not: 2 slides right.
+        self.assertEqual(offers.alternate_order([[1, 3]], 3), [1, 3, 2])
+
+    def test_chained_groups_make_one_cluster(self):
+        self.assertEqual(offers.alternate_order([[1, 3], [3, 4]], 4), [1, 3, 4, 2])
+
+    def test_a_deferral_closes_the_row(self):
+        self.assertEqual(offers.alternate_order([[1, 3]], 3, deferrals=[3]), [1, 2, 3])
+
+    def test_two_deferrals_keep_their_order_at_the_end(self):
+        self.assertEqual(offers.alternate_order([[2, 4]], 4, deferrals=[2, 4]), [1, 3, 2, 4])
+
+    def test_an_alternate_of_everything_goes_last_even_unnamed(self):
+        self.assertEqual(offers.alternate_order([[1, 2], [1, 3], [1, 4]], 4), [2, 3, 4, 1])
+
+    def test_two_actions_and_a_deferral_put_the_deferral_last(self):
+        # Every chip is an alternate of the other two here, so only the phrasing decides.
+        groups = [[1, 3], [1, 2], [2, 3]]
+        self.assertEqual(offers.alternate_order(groups, 3, deferrals=[2]), [1, 3, 2])
+
+    def test_the_reorder_moves_labels_and_numbers(self):
+        text = '::followups{alt="1,3" rec="3" risky="1" q1="Force-push" q2="Add a note" q3="Leave it"}'
+        out = offers.reorder_alternates(text, deferrals=[3])
+        self.assertIn('q1="Force-push"', out)
+        self.assertIn('q2="Add a note"', out)
+        self.assertIn('q3="Leave it"', out, "the deferral closes the row")
+        self.assertIn('alt="1,3"', out)
+
+    def test_the_marks_follow_their_chip(self):
+        text = '::followups{alt="2,4" rec="2" risky="2" q1="Ship" q2="Delete the tag" q3="Notes" q4="Recreate"}'
+        out = offers.reorder_alternates(text)
+        self.assertIn('rec="2"', out, "the recommendation stays on the delete chip")
+        self.assertIn('risky="2"', out)
+        self.assertIn('alt="2,3"', out, "the partner slid from slot 4 to slot 3")
+        self.assertIn('q3="Recreate"', out)
+
+    def test_a_reorder_that_changes_nothing_returns_the_text(self):
+        text = '::followups{alt="1,2" q1="A" q2="B" q3="C"}'
+        self.assertEqual(offers.reorder_alternates(text), text)
+
+    def test_a_second_pass_changes_nothing(self):
+        text = '::followups{alt="1,3" q1="Force-push" q2="Add a note" q3="Leave it"}'
+        once = offers.reorder_alternates(text, deferrals=[3])
+        self.assertEqual(offers.reorder_alternates(once, deferrals=[3]), once)
+
+    def test_prose_is_untouched(self):
+        self.assertEqual(offers.reorder_alternates("No chips here."), "No chips here.")
+
+
 if __name__ == "__main__":
     unittest.main()

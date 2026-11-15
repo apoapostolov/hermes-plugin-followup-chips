@@ -25,12 +25,14 @@ from .offers import (
     stamp_multi,
     stamp_session,
     stamp_steer,
+    reorder_alternates,
     strip_risky,
 )
 from .prompt_section import MAX_CHARS, chips_rule
 from .recommend import (
     FOLLOWUP_RECOMMEND_SCHEMA,
     alternate_groups,
+    is_none_option,
     risky_picks,
     handler as recommend_handler,
     picks_for,
@@ -203,6 +205,10 @@ def register(ctx) -> None:
             enforced = alternate_groups(options)
             if enforced:
                 changed = stamp_alternates(changed, enforced, len(options))
+            # Alternates belong next to each other, and the option that means "leave it"
+            # closes the row: a reader should not have to hunt for the route a chip replaces.
+            deferrals = [n for n, label in enumerate(options, start=1) if is_none_option(label)]
+            changed = reorder_alternates(changed, deferrals)
         if steer:
             changed = stamp_steer(changed)
         if not accent:

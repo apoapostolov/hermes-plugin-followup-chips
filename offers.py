@@ -409,6 +409,162 @@ def _without_risky(match: "re.Match[str]") -> str:
     return match.group(1) + body + match.group(3)
 
 
+ALT_NUMBER_ATTRS = ("rec", "risky")
+Q_ATTR_VALUE_RE = re.compile(r"\bq(\d+)\s*=\s*\"[^\"]*\"")
+
+
+def _clusters(groups: list[list[int]], count: int, universal: set[int]) -> list[list[int]]:
+    """Chips joined by any alternate group, as lists of 1-based numbers.
+
+    The universal alternate is left out of the joins: it is paired with everything, so
+    letting it merge would put every chip in one cluster and change nothing.
+    """
+    parent = list(range(count + 1))
+
+    def find(n: int) -> int:
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    for group in groups:
+        members = [n for n in group if n not in universal]
+        for other in members[1:]:
+            union(members[0], other)
+
+    out: dict[int, list[int]] = {}
+    for n in range(1, count + 1):
+        if n in universal:
+            continue
+        out.setdefault(find(n), []).append(n)
+    return [sorted(members) for members in out.values()]
+
+
+def alternate_order(
+    groups: list[list[int]], count: int, deferrals: object = ()
+) -> list[int]:
+    """The order that puts alternates next to each other, 1-based.
+
+    Chips that exclude each other belong together on the row: a reader who sees "force-push"
+    and then "add a note" has to hunt for the route it replaces. Clusters keep the order their
+    first member had, so the model's sense of what matters most survives inside each block, and
+    an option that is the alternate to all the others, usually "leave it as it is", goes last.
+    """
+    if count < 2 or not groups:
+        return list(range(1, count + 1))
+    # An option that means "take none of these" closes the row whether or not the model
+    # paired it with everything, and so does one its groups make the alternate of all.
+    last = {int(n) for n in deferrals if str(n).isdigit() or isinstance(n, int)}
+    last = {n for n in last if 1 <= n <= count}
+    # With three or more options left, one chip paired with all of them is the "take none"
+    # option even when its label does not say so. With two, both are alternates of each
+    # other and the test says nothing, so only the deferral phrasing counts.
+    actions = [n for n in range(1, count + 1) if n not in last]
+    covers_all = {
+        n
+        for n in actions
+        if len(actions) >= 3
+        and all(
+            any(other in group for group in groups if n in group)
+            for other in actions
+            if other != n
+        )
+    }
+    universal = last | covers_all
+    clusters = _clusters(groups, count, universal)
+    order: list[int] = []
+    placed: set[int] = set()
+    seen: set[int] = set()
+    for cluster in clusters:
+        members = sorted(cluster)
+        for member in members:
+            if member in placed:
+                continue
+            chain = next((c for c in clusters if member in c), [member])
+            for n in sorted(chain):
+                if n not in placed:
+                    order.append(n)
+                    placed.add(n)
+    for n in range(1, count + 1):
+        if n not in placed and n not in universal:
+            order.append(n)
+            placed.add(n)
+    # The universal alternate (or alternates) closes the row.
+    order.extend(sorted(universal))
+    return order
+
+
+def reorder_alternates(text: str, deferrals: object = ()) -> str:
+    """Rewrite a directive so alternates sit together and the do-nothing option comes last.
+
+    Labels keep their slots; only the values move, so the rest of the directive is untouched.
+    """
+    if not isinstance(text, str) or "alt" not in text:
+        return text
+    try:
+        return _DIRECTIVE_BODY_RE.sub(lambda m: _reordered_body(m, deferrals), text, count=1)
+    except Exception:  # a hook must never break a reply
+        return text
+
+
+def _reordered_body(match: "re.Match[str]", deferrals: object = ()) -> str:
+    body = match.group(2)
+    labels = [value for _, value in sorted(
+        ((int(n), v) for n, v in Q_ATTR_RE.findall(body)), key=lambda pair: pair[0]
+    )]
+    if len(labels) < 2:
+        return match.group(0)
+    groups = parse_alternates(ALT_GROUP_RE.search(body).group(1) if ALT_GROUP_RE.search(body) else "", len(labels))
+    order = alternate_order(groups, len(labels), deferrals)
+    if order == list(range(1, len(labels) + 1)):
+        return match.group(0)
+
+    moved = {old: new for new, old in enumerate(order, start=1)}
+    new_body = body
+    for slot, old in enumerate(order, start=1):
+        new_body = re.sub(
+            r"\bq%d\s*=\s*\"[^\"]*\"" % slot,
+            lambda m, value=labels[old - 1]: 'q%d="%s"' % (slot, value),
+            new_body,
+            count=1,
+        )
+    for attribute in ALT_NUMBER_ATTRS:
+        new_body = _remap_numbers(new_body, attribute, moved)
+    moved_groups = []
+    for group in groups:
+        members = sorted({moved[n] for n in group})
+        if len(members) >= 2 and members not in moved_groups:
+            moved_groups.append(members)
+    attr = alternate_attribute(moved_groups, len(labels))
+    if attr:
+        new_body = ALT_GROUP_RE.sub('alt="%s"' % attr, new_body, count=1)
+    else:
+        new_body = ALT_GROUP_RE.sub("", new_body, count=1)
+    return match.group(1) + new_body + match.group(3)
+
+
+def _remap_numbers(body: str, attribute: str, moved: dict[int, int]) -> str:
+    pattern = re.compile(r"\s*%s\s*=\s*\"([^\"]*)\"" % attribute)
+    found = pattern.search(body)
+    if not found:
+        return body
+    numbers = []
+    for piece in found.group(1).split(","):
+        try:
+            number = int(piece.strip())
+        except ValueError:
+            continue
+        if number in moved and moved[number] not in numbers:
+            numbers.append(moved[number])
+    numbers.sort()
+    return pattern.sub(' %s="%s"' % (attribute, ",".join(str(n) for n in numbers)) if numbers else "", body, count=1)
+
+
 def stamp_alternates(text: str, groups: object, count: int) -> str:
     """Add alternate groups to the reply's directive without dropping its own.
 
