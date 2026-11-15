@@ -738,14 +738,18 @@ function StaleChip(props) {
 }
 
 /* The tick is always laid out, only hidden when unmarked: reserving it keeps the pill
-   width still when a pick adds the glyph. */
+   width still when a pick adds the glyph. The space between the glyph and the label is a
+   gap on the container, not a trailing space in the glyph, so its width is the same in
+   every chip and the columns of the subtitle grid stay honest. */
+const TICK_GAP = '6px'
+
 function labelParts(q, marked) {
   return [
     jsx('span', {
       key: 'tick',
       'aria-hidden': 'true',
       style: { visibility: marked ? 'visible' : 'hidden' },
-      children: '✓ ',
+      children: '✓',
     }),
     jsx('span', { key: 'q', children: q }),
   ]
@@ -834,7 +838,7 @@ function Chip(props) {
                 display: 'grid',
                 gridTemplateColumns: 'max-content minmax(0, 1fr)',
                 alignItems: 'baseline',
-                columnGap: 0,
+                columnGap: TICK_GAP,
                 minWidth: 0,
                 flex: '1 1 auto',
               },
@@ -849,7 +853,7 @@ function Chip(props) {
             })
           : jsx('span', {
               key: 'label',
-              style: { display: 'inline-flex', alignItems: 'baseline' },
+              style: { display: 'inline-flex', alignItems: 'baseline', columnGap: TICK_GAP },
               children: labelParts(q, marked),
             }),
         props.risky

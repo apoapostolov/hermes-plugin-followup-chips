@@ -148,7 +148,9 @@ function label(el) {
       .filter((part) => !(part && part.props && part.props.className === 'fu-sub'))
       .filter((part) => !(part && part.props && part.props.style && part.props.style.visibility === 'hidden'))
       .map((part) => (part && typeof part === 'object' ? part.props.children : part))
-      .join('')
+      /* The tick and the label are separate cells joined by a gap, so the reading is
+         spelled with a space even though the glyph no longer carries one. */
+      .join(' ')
   }
   return inner
 }
@@ -166,7 +168,15 @@ function tickReserved(el) {
   const label = el.props.children[0]
   const inner = label && label.props && label.props.children
   if (!Array.isArray(inner)) return false
-  return inner.some((part) => part && part.props && part.props.children === '✓ ')
+  /* Nested one level: a chip with a subtitle wraps the tick in a grid, so the children
+     array sits inside the label span rather than directly on it. */
+  const walk = (parts) =>
+    parts.some((part) => {
+      if (!part || !part.props) return false
+      if (part.props.children === '✓') return true
+      return Array.isArray(part.props.children) ? walk(part.props.children) : false
+    })
+  return walk(inner)
 }
 
 function badge(el) {
@@ -1156,6 +1166,8 @@ test('subtitle: the second line starts where the label starts, not under the tic
   assert.equal(String(body.props.style.gridTemplateColumns), 'max-content minmax(0, 1fr)')
   assert.equal(String(mark.style.gridColumn), '2', 'the subtitle shares the label column')
   assert.equal(body.props.children.length, 3, 'tick, label, subtitle')
+  assert.equal(body.props.children[0].props.children, '✓', 'the glyph carries no trailing space')
+  assert.equal(String(body.props.style.columnGap), '6px', 'the tick gap is a container gap')
   assert.equal(label(chip), 'Push it', 'the label text is still just the label')
 })
 
