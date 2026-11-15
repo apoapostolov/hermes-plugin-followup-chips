@@ -545,6 +545,22 @@ function parseRec(value, count) {
    step that could break something cannot be mistaken for a recommended one. */
 const RISK_TONE = 'var(--ui-warning, #b45309)'
 
+/* The second line: dimmer than the label, a shade smaller, and hard-clamped at two
+   wrapped lines so a chatty subtitle cannot turn a chip into a paragraph. */
+const SUB_MARK = {
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: '2',
+  overflow: 'hidden',
+  marginTop: '1px',
+  fontSize: '0.82em',
+  lineHeight: '1.3',
+  color: 'var(--ui-text-secondary, var(--muted-foreground, #666))',
+  opacity: 0.72,
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
+}
+
 const REC_MARK = {
   fontSize: '0.85em',
   fontWeight: 600,
@@ -725,6 +741,20 @@ function StaleChip(props) {
   )
 }
 
+/* The tick is always laid out, only hidden when unmarked: reserving it keeps the pill
+   width still when a pick adds the glyph. */
+function labelParts(q, marked) {
+  return [
+    jsx('span', {
+      key: 'tick',
+      'aria-hidden': 'true',
+      style: { visibility: marked ? 'visible' : 'hidden' },
+      children: '✓ ',
+    }),
+    jsx('span', { key: 'q', children: q }),
+  ]
+}
+
 function Chip(props) {
   const q = props.q
   const idx = props.idx
@@ -773,11 +803,11 @@ function Chip(props) {
       onMouseLeave: function () {
         setHover(false)
       },
-      title: q,
+      title: props.subtitle ? q + '\n' + props.subtitle : q,
       style: {
         cursor: 'pointer',
         display: 'inline-flex',
-        alignItems: 'center',
+        alignItems: props.subtitle ? 'flex-start' : 'center',
         gap: '8px',
         boxSizing: 'border-box',
         border: stroke
@@ -797,21 +827,32 @@ function Chip(props) {
         transition: 'border-color 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease',
       },
       children: [
-        jsx('span', {
-          key: 'label',
-          style: { display: 'inline-flex', alignItems: 'baseline' },
-          children: [
-            /* The tick is always laid out, only hidden when unmarked: reserving it
-               keeps the pill width still when a pick adds the glyph. */
-            jsx('span', {
-              key: 'tick',
-              'aria-hidden': 'true',
-              style: { visibility: marked ? 'visible' : 'hidden' },
-              children: '✓ ',
+        props.subtitle
+          ? jsx('span', {
+              key: 'label',
+              /* Two lines: the label, then its clarification. The column keeps the
+                 pills on the label's line while the subtitle wraps under both. */
+              style: {
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                minWidth: 0,
+                flex: '1 1 auto',
+              },
+              children: [
+                jsx('span', {
+                  key: 'row',
+                  style: { display: 'inline-flex', alignItems: 'baseline', maxWidth: '100%' },
+                  children: labelParts(q, marked),
+                }),
+                jsx('span', { key: 'sub', className: 'fu-sub', style: Object.assign({}, SUB_MARK) , children: props.subtitle }),
+              ],
+            })
+          : jsx('span', {
+              key: 'label',
+              style: { display: 'inline-flex', alignItems: 'baseline' },
+              children: labelParts(q, marked),
             }),
-            jsx('span', { key: 'q', children: q }),
-          ],
-        }),
         props.risky
           ? jsx('span', {
               key: 'risk',
@@ -999,8 +1040,25 @@ function Chips(props) {
   /* Alternate groups: picking one member clears the others, so a decision with
      two routes in it can never be sent as both. */
   const alt = parseAlt(attrs.alt, qs.length)
-  /* risky="1,3": the classifier judged those steps able to damage or break something. */
+  /* d1="…", d3="…": a dim second line under a label whose verb hides what it touches.
+     Absent for the options that need no explanation, which is most of them. */
+function parseSubtitles(attrs, count) {
+  const out = new Array(count)
+  for (let i = 0; i < count; i += 1) {
+    const raw = attrs['d' + (i + 1)]
+    out[i] = typeof raw === 'string' ? normalizeSubtitle(raw) : ''
+  }
+  return out
+}
+
+/* One line of plain text: newlines and runs of spaces collapse, so a model that wraps
+   its own prose cannot give the chip an accidental third line. */
+function normalizeSubtitle(text) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim()
+  return flat.length > 160 ? flat.slice(0, 160).replace(/\s+\S*$/, '') + '…' : flat
+}
   const risky = parseRec(attrs.risky, qs.length)
+  const subs = parseSubtitles(attrs, qs.length)
 
   const qsKey = qs.join('\n')
   /* Register what this reply proposes, once, so later replies can carry it. */
@@ -1191,6 +1249,7 @@ function Chips(props) {
       active: active,
       recommended: rec.indexOf(i) !== -1,
       risky: risky.indexOf(i) !== -1,
+      subtitle: subs[i] || '',
       /* Greyed because a chip it is opposed to is already picked. */
       excluded: multi && alternatesOf(alt, i).some(function (n) {
         return picked.indexOf(n) !== -1

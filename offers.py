@@ -234,6 +234,55 @@ def directive_options(text: str) -> list[str]:
     return [value for _, value in found]
 
 
+D_ATTR_RE = re.compile(r"\bd(\d+)\s*=\s*\"([^\"]*)\"")
+MAX_SUBTITLE = 160
+
+
+def normalize_subtitle(value: object) -> str:
+    """One line of plain text: the renderer wraps it and clips at two wrapped lines."""
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    return text[:MAX_SUBTITLE].rstrip()
+
+
+def parse_subtitles(value: object, count: int) -> list[str]:
+    """Subtitles for the chips, from ``dN`` attributes or a tool list.
+
+    A subtitle exists to make an option understandable when its label alone is not,
+    so a missing or empty entry is normal rather than an error: the row renders a
+    label without a second line, and the model is never obliged to describe
+    something that already says what it does.
+    """
+    out = [""] * max(count, 0)
+    if isinstance(value, str):
+        for number, text in D_ATTR_RE.findall(value):
+            index = int(number) - 1
+            if 0 <= index < len(out):
+                out[index] = normalize_subtitle(text)
+        return out
+    if isinstance(value, (list, tuple)):
+        for index, text in enumerate(value[: len(out)]):
+            out[index] = normalize_subtitle(text)
+    return out
+
+
+def subtitle_attribute(subs: list[str]) -> str:
+    """``d1="…" d3="…"`` for the entries that have one, in chip order."""
+    parts = [
+        'd{}="{}"'.format(index, _sane(text))
+        for index, text in enumerate(_clean_subs(subs), start=1)
+        if text
+    ]
+    return " ".join(parts)
+
+
+def _clean_subs(subs: object) -> list[str]:
+    if not isinstance(subs, (list, tuple)):
+        return []
+    return [normalize_subtitle(text) for text in subs]
+
+
 ALT_GROUP_RE = re.compile(r"alt\s*=\s*\"([^\"]*)\"")
 _MAX_ALT_GROUPS = 6
 
@@ -298,6 +347,7 @@ def directive(
     rec: str = "",
     alt: str = "",
     risky: str = "",
+    subs: object = (),
 ) -> str:
     """The paragraph the renderer reads.
 
@@ -330,6 +380,9 @@ def directive(
         head += 'alt="{}" '.format(alt)
     if risky:
         head += 'risky="{}" '.format(risky)
+    detail = subtitle_attribute(_clean_subs(subs))
+    if detail:
+        attrs += " " + detail
     return "::followups{" + head + attrs + "}"
 
 
@@ -525,6 +578,7 @@ def _reordered_body(match: "re.Match[str]", deferrals: object = ()) -> str:
         return match.group(0)
 
     moved = {old: new for new, old in enumerate(order, start=1)}
+    details = dict((int(n), text) for n, text in D_ATTR_RE.findall(body))
     new_body = body
     for slot, old in enumerate(order, start=1):
         new_body = re.sub(
@@ -533,6 +587,17 @@ def _reordered_body(match: "re.Match[str]", deferrals: object = ()) -> str:
             new_body,
             count=1,
         )
+
+    if details:
+        # A subtitle describes the chip it was written for, so it travels with it.
+        new_body = re.sub(r"\s{2,}", " ", D_ATTR_RE.sub("", new_body)).strip()
+        moved_details = sorted(
+            (moved[old], text) for old, text in details.items() if old in moved and text
+        )
+        if moved_details:
+            new_body = new_body.rstrip() + " " + " ".join(
+                'd{}="{}"'.format(number, text) for number, text in moved_details
+            )
     for attribute in ALT_NUMBER_ATTRS:
         new_body = _remap_numbers(new_body, attribute, moved)
     moved_groups = []

@@ -136,9 +136,13 @@ function send(el) {
 function label(el) {
   const first = el.props.children[0]
   if (first == null || typeof first !== 'object') return first
-  const inner = first.props.children
-  // A chip label is [tick span, text span]; only what is visible counts, so an
-  // unpicked chip reads as its text and a picked one keeps the ✓.
+  let inner = first.props.children
+  // A chip body is [tick span, text span], or [row span, subtitle] when the option
+  // carries a second line; only what is visible counts, so an unpicked chip reads as
+  // its text and a picked one keeps the ✓.
+  if (Array.isArray(inner) && inner[0] && inner[0].props && Array.isArray(inner[0].props.children)) {
+    inner = inner[0].props.children
+  }
   if (Array.isArray(inner)) {
     return inner
       .filter((part) => !(part && part.props && part.props.style && part.props.style.visibility === 'hidden'))
@@ -146,6 +150,15 @@ function label(el) {
       .join('')
   }
   return inner
+}
+
+/* The chip's second line, or undefined when the option carries no subtitle. */
+function subtitle(el) {
+  const body = el.props.children[0]
+  const kids = body && body.props && body.props.children
+  if (!Array.isArray(kids)) return undefined
+  const sub = kids.find((k) => k && k.props && k.props.className === 'fu-sub')
+  return sub ? sub.props : undefined
 }
 
 function tickReserved(el) {
@@ -1065,6 +1078,58 @@ test('carry: a block that renders again gives its old entries their verdict back
   assert.ok(rows.includes('Old 1'), 'the recommendation recovered from the transcript survives')
   assert.ok(!rows.includes('Old 2'), 'its unmarked neighbours go first')
   assert.ok(!rows.includes('Old 6'))
+})
+
+/* ---- subtitles ----------------------------------------------------------- */
+test('subtitle: a d attribute draws a dim second line under the label', () => {
+  const attrs = { multi: '1', q1: 'Push it', d1: 'Rewrites origin, discarding their commit', q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-1', source: 'sub-a' }))
+  const first = subtitle(chips(el)[0])
+  assert.ok(first, 'the first chip carries a subtitle')
+  assert.equal(first.children, 'Rewrites origin, discarding their commit')
+  assert.equal(subtitle(chips(el)[1]), undefined, 'an option that needs none has none')
+  assert.equal(label(chips(el)[0]), 'Push it', 'the label is unchanged')
+})
+
+test('subtitle: dimmer and smaller than the label, clipped at two lines', () => {
+  const attrs = { q1: 'Push it', d1: 'Rewrites origin' , q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-2', source: 'sub-b' }))
+  const mark = subtitle(chips(el)[0])
+  assert.equal(String(mark.style.opacity), '0.72', 'dim')
+  assert.ok(parseFloat(mark.style.fontSize) < 1, 'smaller than the chip text')
+  assert.equal(String(mark.style.WebkitLineClamp), '2')
+  assert.equal(mark.style.overflow, 'hidden')
+  assert.equal(mark.style.display, '-webkit-box', 'clamping needs the box display')
+})
+
+test('subtitle: the full text stays reachable in the chip tooltip', () => {
+  const attrs = { q1: 'Push it', d1: 'Rewrites origin', q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-3', source: 'sub-c' }))
+  assert.equal(chips(el)[0].props.title, 'Push it\nRewrites origin')
+  assert.equal(chips(el)[1].props.title, 'Tag it', 'no subtitle, no second tooltip line')
+})
+
+test('subtitle: whitespace collapses so a wrapped model reply cannot add a line', () => {
+  const attrs = { q1: 'Push it', d1: '  Rewrites   origin,\nleaving    nothing  ', q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-4', source: 'sub-d' }))
+  assert.equal(subtitle(chips(el)[0]).children, 'Rewrites origin, leaving nothing')
+})
+
+test('subtitle: an over-long line is cut once, at a word, and says so', () => {
+  const attrs = { q1: 'Push it', d1: 'x'.repeat(400), q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-5', source: 'sub-e' }))
+  const text = subtitle(chips(el)[0]).children
+  assert.equal(text.length, 161, '160 characters plus the ellipsis')
+  assert.ok(text.endsWith('…'))
+})
+
+test('subtitle: a described chip still sends its label alone', () => {
+  resetHost()
+  submits.length = 0
+  const attrs = { multi: '0', q1: 'Push it', d1: 'Rewrites origin', q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-6', source: 'sub-f' }))
+  chips(el)[0].props.onClick()
+  assert.deepEqual(submits, [['sub-6', 'Push it']], 'the message is the label, never the subtitle')
 })
 
 /* ---- risky options ------------------------------------------------------- */

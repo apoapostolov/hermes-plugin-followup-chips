@@ -28,6 +28,7 @@ try:  # the plugin loads this as a package; the test suite imports it top-level
     alternate_attribute,
     directive,
     merge_alternates,
+    parse_subtitles,
 )
 except ImportError:
     from offers import (
@@ -36,6 +37,7 @@ except ImportError:
     alternate_attribute,
     directive,
     merge_alternates,
+    parse_subtitles,
 )
 
 # The prompt asks for 2 to 5; the classifier payload takes up to 6. A chip row past
@@ -128,31 +130,41 @@ class Pending:
         rec: str = "",
         alt: str = "",
         risky: str = "",
+        subs: object = (),
     ) -> None:
         key = str(session_id or "")
         with self._lock:
-            self._entries[key] = (self._clock(), list(options), multi, rec, alt, risky)
+            options = list(options)
+            self._entries[key] = (
+                self._clock(),
+                options,
+                multi,
+                rec,
+                alt,
+                risky,
+                parse_subtitles(subs, len(options)),
+            )
 
     def has(self, session_id: str) -> bool:
         return self._fresh(session_id) is not None
 
-    def take(self, session_id: str) -> tuple[list[str], bool | None, str, str, str] | None:
+    def take(self, session_id: str) -> tuple[list[str], bool | None, str, str, str, list[str]] | None:
         """Pop the registration, or None when there is none or it has expired."""
         key = str(session_id or "")
         with self._lock:
             entry = self._entries.pop(key, None)
         if entry is None:
             return None
-        created, options, multi, rec, alt, risky = entry
+        created, options, multi, rec, alt, risky, subs = entry
         if self._clock() - created > self._ttl:
             return None
-        return options, multi, rec, alt, risky
+        return options, multi, rec, alt, risky, subs
 
     def forget(self, session_id: str) -> None:
         with self._lock:
             self._entries.pop(str(session_id or ""), None)
 
-    def _fresh(self, session_id: str) -> tuple[float, list[str], bool | None, str, str, str] | None:
+    def _fresh(self, session_id: str) -> tuple[float, list[str], bool | None, str, str, str, list[str]] | None:
         key = str(session_id or "")
         with self._lock:
             entry = self._entries.get(key)
@@ -184,8 +196,10 @@ def attach(text: str, session_id: str, platform: str = "", pending: Pending | No
     entry = store.take(session_id)
     if entry is None:
         return None
-    options, multi, rec, alt, risky = entry
-    return text.rstrip() + "\n\n" + directive(options, multi=multi, rec=rec, alt=alt, risky=risky)
+    options, multi, rec, alt, risky, subs = entry
+    return text.rstrip() + "\n\n" + directive(
+        options, multi=multi, rec=rec, alt=alt, risky=risky, subs=subs
+    )
 
 
 FOLLOWUP_CHIPS_SCHEMA = {
@@ -210,6 +224,19 @@ FOLLOWUP_CHIPS_SCHEMA = {
                 "minItems": 2,
                 "maxItems": MAX_OPTIONS,
                 "description": "The chip labels in display order, imperative and specific.",
+            },
+            "subtitles": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": MAX_OPTIONS,
+                "description": (
+                    "One short line per option, in the same order, and only where the label "
+                    "alone would mislead or be ambiguous: what the step actually touches, "
+                    "or the consequence a bare verb hides. Pass an empty string where an "
+                    "option needs none. Never restate the label, never sell the option, and "
+                    "keep it under a hundred characters; it renders dim under the label and "
+                    "is clipped to two lines."
+                ),
             },
             "multi": {
                 "type": "boolean",
@@ -306,7 +333,8 @@ def handler(
             except Exception:  # no classifier, no pill; the chips are unaffected
                 numbers = []
             risky = rec_attribute(numbers, len(options))
-        store.put(session_id, options, multi, rec, alt, risky)
+        subs = parse_subtitles(params.get("subtitles"), len(options))
+        store.put(session_id, options, multi, rec, alt, risky, subs)
         shape = "multi" if multi is not False else "one choice"
         detail = "%d options (%s)" % (len(options), shape)
         if alt:

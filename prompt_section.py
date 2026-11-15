@@ -52,6 +52,14 @@ OTHER = (
     "numbered list of concrete options instead of an open question."
 )
 
+SUBTITLE = (
+    " A chip can carry a second, dimmer line when the label alone would be misread: pass "
+    "subtitles with the chips (one entry per option, empty where it needs none) or dN on "
+    "the directive. Say what the step touches or what a bare verb hides, never what the "
+    "label already says, and leave it out when the option is already clear: a line under "
+    "every chip is noise, and it is clipped at two lines anyway."
+)
+
 RISK = (
     " Mark the options that could do damage rather than just cost time: deleting or "
     "overwriting something, rewriting published history, spending money, running a "
@@ -77,5 +85,5 @@ def chips_rule(session: dict, recommends: bool = False, risk: bool = False) -> s
     """
     session = session or {}
     if session.get("platform") in DRAWS:
-        return DESKTOP + (RECOMMEND if recommends else "") + (RISK if risk else "")
+        return DESKTOP + SUBTITLE + (RECOMMEND if recommends else "") + (RISK if risk else "")
     return OTHER
