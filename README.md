@@ -60,6 +60,8 @@ The pairs are the model's call, with one rule applied whether or not it says so:
 
 On the tool path the same decision travels as `alternates: [[1, 3]]`, and the implied pairs are merged in before the directive is written.
 
+Chips that exclude each other are drawn next to each other, in the order the model put them, so a route and the one it replaces never sit apart with unrelated steps between them. An option that means leaving things as they are closes the row, and with three or more options a chip the groups pair with all of the others is treated the same way even when its label does not say so. The numbers in `alt`, `rec` and `risky` are rewritten to the new positions, and a directive already in order is not touched.
+
 Every chip in a block shares one width, the width of its longest option, so a row of short actions lines up instead of staggering. `accent="0"` drops the accent tint on the recommended chips and leaves everything else alone.
 
 ```
@@ -247,7 +249,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 203 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
+python -m unittest discover -s tests -t .   # 216 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
 node tests/chips.test.mjs                   # 66 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
 ```
 
