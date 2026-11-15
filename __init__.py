@@ -12,7 +12,7 @@ desktop-plugins/, where the model emits the directive on its own.
 
 from __future__ import annotations
 
-from .offers import rewrite
+from .offers import rewrite, stamp_multi
 from .prompt_section import MAX_CHARS, chips_rule
 
 NAME = "followup-chips"
@@ -39,6 +39,12 @@ def register(ctx) -> None:
             enabled = bool(ctx.get_config(SETTING, False))
         except Exception:  # an unreadable setting must not break a reply
             enabled = False
-        return offer_hook(response_text=response_text, platform=platform, auto_offers=enabled)
+        changed = offer_hook(response_text=response_text, platform=platform, auto_offers=enabled)
+        if changed is None:
+            changed = response_text
+        # Pickability is the default for two or more chips: writing it into the
+        # directive means a renderer from before this rule agrees with a new one.
+        stamped = stamp_multi(changed)
+        return stamped if stamped != response_text else None
 
     ctx.register_hook("transform_llm_output", transform)

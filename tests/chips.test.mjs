@@ -140,24 +140,27 @@ function test(name, fn) {
 }
 
 /* ---- single select: unchanged behaviour --------------------------------- */
-test('single click sends at once and shows no send button', () => {
+test('multi="0" sends on one click and shows no send button', () => {
   submits.length = 0
-  const el = render(register({ attrs: { q1: 'Push it?', q2: 'Tag it?' }, sessionId: 's1', source: 'src-a' }))
+  const el = render(
+    register({ attrs: { multi: '0', q1: 'Push it?', q2: 'Tag it?' }, sessionId: 's1', source: 'src-a' })
+  )
   assert.equal(chips(el).length, 2)
   assert.equal(send(el), undefined, 'single select has no send button')
   chips(el)[1].props.onClick()
   assert.deepEqual(submits, [['s1', 'Tag it?']])
 })
 
-test('single select marks the chosen chip and settles on message.complete', () => {
-  let el = render(register({ attrs: { q1: 'Push it?', q2: 'Tag it?' }, sessionId: 's2', source: 'src-b' }))
+test('multi="0" marks the chosen chip and settles on message.complete', () => {
+  const attrs = { multi: '0', q1: 'Push it?', q2: 'Tag it?' }
+  let el = render(register({ attrs, sessionId: 's2', source: 'src-b' }))
   chips(el)[0].props.onClick()
-  el = render(register({ attrs: { q1: 'Push it?', q2: 'Tag it?' }, sessionId: 's2', source: 'src-b' }))
+  el = render(register({ attrs, sessionId: 's2', source: 'src-b' }))
   assert.match(chips(el)[0].props.className, /fu-chosen/)
   assert.match(chips(el)[0].props.className, /fu-running/)
   assert.equal(label(chips(el)[0]), '✓ Push it?')
   events['message.complete'][0]('s2')
-  el = render(register({ attrs: { q1: 'Push it?', q2: 'Tag it?' }, sessionId: 's2', source: 'src-b' }))
+  el = render(register({ attrs, sessionId: 's2', source: 'src-b' }))
   assert.doesNotMatch(chips(el)[0].props.className, /fu-running/)
 })
 
@@ -245,13 +248,34 @@ test('a failed submit warns instead of marking the block', () => {
   }
 })
 
-test('multi="true" and multi="yes" are accepted, single stays the default', () => {
-  for (const flag of ['true', 'yes', 'on', true]) {
+test('multi accepts 1/true/yes/on, and 0/false/no/off opts out', () => {
+  for (const flag of ['1', 'true', 'yes', 'on', true]) {
     const el = render(register({ attrs: { multi: flag, q1: 'A', q2: 'B' }, sessionId: 'f', source: 'src-' + flag }))
-    assert.ok(send(el), 'multi via ' + JSON.stringify(flag))
+    assert.ok(send(el), 'pickable via ' + JSON.stringify(flag))
   }
-  const plain = render(register({ attrs: { q1: 'A', q2: 'B' }, sessionId: 'f', source: 'src-plain' }))
-  assert.equal(send(plain), undefined)
+  for (const flag of ['0', 'false', 'no', 'off', false]) {
+    const el = render(register({ attrs: { multi: flag, q1: 'A', q2: 'B' }, sessionId: 'x', source: 'src-x-' + flag }))
+    assert.equal(send(el), undefined, 'one-click via ' + JSON.stringify(flag))
+  }
+})
+
+test('two chips are pickable when the directive says nothing', () => {
+  submits.length = 0
+  const attrs = { q1: 'Push the branch', q2: 'Tag a release' }
+  let el = render(register({ attrs, sessionId: 'd1', source: 'src-d1' }))
+  assert.ok(send(el), 'a plain two-option block shows the send button')
+  chips(el)[0].props.onClick()
+  assert.equal(submits.length, 0, 'the click picks instead of sending')
+  el = render(register({ attrs, sessionId: 'd1', source: 'src-d1' }))
+  assert.equal(label(send(el)), 'Send 1')
+})
+
+test('one chip has nothing to pick, so it sends on one click', () => {
+  submits.length = 0
+  const el = render(register({ attrs: { q1: 'Only option' }, sessionId: 'd2', source: 'src-d2' }))
+  assert.equal(send(el), undefined, 'no send button for a single chip')
+  chips(el)[0].props.onClick()
+  assert.deepEqual(submits, [['d2', 'Only option']])
 })
 
 test('q order is numeric, not lexicographic', () => {

@@ -20,6 +20,10 @@ DRAWS = frozenset({"local", "desktop"})
 
 DIRECTIVE_RE = re.compile(r"::followups\s*\{")
 
+# Split a directive into its opening, its attributes and its closing brace, so a
+# stamp can add one attribute and leave everything else exactly as written.
+_DIRECTIVE_BODY_RE = re.compile(r"(::followups\s*\{)([^}]*)(\})")
+
 # The closing-offer vocabulary. Deliberately narrow: a bare "I'll …" is a
 # statement of intent, not an offer, so it stays out of this list (it is only
 # stripped from an option once a real trigger has matched).
@@ -214,16 +218,49 @@ def plan(text: str) -> tuple[str, list[str]] | None:
     return "\n\n".join(head).strip(), options
 
 
-def directive(options: list[str]) -> str:
-    """The paragraph the renderer reads. multi only when more than one can be picked.
+def directive(options: list[str], multi: bool | None = True) -> str:
+    """The paragraph the renderer reads.
+
+    Several chips are pickable so the user can send them as one turn; `multi=False`
+    writes the opt-out for an exclusive choice, where one click sends. A single chip
+    carries no attribute at all because there is nothing to pick.
 
     ["Push it", "Open the PR"] → '::followups{multi="1" q1="Push it" q2="Open the PR"}'
     """
     attrs = " ".join(
         'q{}="{}"'.format(i + 1, _sane(option)) for i, option in enumerate(options)
     )
-    multi = 'multi="1" ' if len(options) > 1 else ""
-    return "::followups{" + multi + attrs + "}"
+    if len(options) < 2:
+        head = ""
+    else:
+        head = 'multi="1" ' if multi is not False else 'multi="0" '
+    return "::followups{" + head + attrs + "}"
+
+
+def stamp_multi(text: str) -> str:
+    """Make two or more chips pickable unless the directive already says otherwise.
+
+    The renderer defaults to pickable for a multi-option block, but writing the
+    attribute means a renderer from before that rule agrees with a new one. A
+    directive that already carries a `multi` (including the opt-out) is left as it
+    is, and a single chip gets nothing because there is nothing to pick. Idempotent,
+    and it never touches prose: no directive means the text comes back unchanged.
+    """
+    if not isinstance(text, str) or not text or not DIRECTIVE_RE.search(text):
+        return text
+
+    def one(match: "re.Match[str]") -> str:
+        body = match.group(2)
+        if re.search(r"\bmulti\s*=", body):
+            return match.group(0)
+        if len(re.findall(r"\bq\d+\s*=", body)) < 2:
+            return match.group(0)
+        return match.group(1) + 'multi="1" ' + body + match.group(3)
+
+    try:
+        return _DIRECTIVE_BODY_RE.sub(one, text)
+    except Exception:  # a hook must never break a reply
+        return text
 
 
 def rewrite(text: str, platform: str = "") -> str | None:

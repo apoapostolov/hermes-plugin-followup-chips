@@ -108,3 +108,52 @@ class DirectiveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PickabilityTest(unittest.TestCase):
+    """Two or more chips are tick-and-send by default; `multi="0"` is the opt-out.
+
+    The renderer defaults the same way, but writing the attribute means a renderer
+    from before that rule agrees with a new one, so both halves are pinned here.
+    """
+
+    def test_directive_writes_pickability_for_two_options(self):
+        self.assertEqual(
+            offers.directive(["A", "B"]),
+            '::followups{multi="1" q1="A" q2="B"}',
+        )
+
+    def test_directive_writes_the_opt_out_when_asked(self):
+        self.assertEqual(
+            offers.directive(["A", "B"], multi=False),
+            '::followups{multi="0" q1="A" q2="B"}',
+        )
+
+    def test_a_single_option_carries_no_multi_either_way(self):
+        self.assertNotIn("multi", offers.directive(["A"], multi=False))
+        self.assertNotIn("multi", offers.directive(["A"], multi=True))
+
+    def test_stamp_adds_pickability_to_a_bare_directive(self):
+        out = offers.stamp_multi('Done.\n\n::followups{q1="A" q2="B"}')
+        self.assertIn('multi="1"', out)
+        self.assertIn('q2="B"', out)
+
+    def test_stamp_leaves_an_explicit_opt_out_alone(self):
+        text = 'Done.\n\n::followups{multi="0" q1="A" q2="B"}'
+        self.assertEqual(offers.stamp_multi(text), text)
+
+    def test_stamp_leaves_one_chip_alone(self):
+        text = 'Done.\n\n::followups{q1="A"}'
+        self.assertEqual(offers.stamp_multi(text), text)
+
+    def test_stamp_is_idempotent(self):
+        once = offers.stamp_multi('Done.\n\n::followups{q1="A" q2="B"}')
+        self.assertEqual(offers.stamp_multi(once), once)
+
+    def test_stamp_leaves_prose_alone(self):
+        self.assertEqual(offers.stamp_multi("Just a reply."), "Just a reply.")
+
+    def test_stamp_keeps_other_attributes(self):
+        out = offers.stamp_multi('Done.\n\n::followups{rec="1" q1="A" q2="B"}')
+        self.assertIn('rec="1"', out)
+        self.assertIn('multi="1"', out)

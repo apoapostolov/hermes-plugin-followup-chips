@@ -12,15 +12,17 @@ End any reply with a directive:
 ::followups{q1="First suggestion?" q2="Second one?" q3="Third?"}
 ```
 
-The plugin renders each `qN` as a clickable chip under the message. One click sends that question as the next user turn — no typing.
+The plugin renders each `qN` as a clickable chip under the message.
 
-Add `multi="1"` when several counts as one answer:
+Two or more chips are toggles. Tick as many as you want and one **Send N** button sends them as a single turn, one per line, in `q` order, so the agent reads it as a person asking for three things at once rather than three queued turns. That is the default because the alternative sent one turn per click.
+
+Add `multi="0"` for a genuinely exclusive choice, where one click sends and picking is never offered:
 
 ```
-::followups{multi="1" q1="Add a CHANGELOG entry" q2="Wire the flag into settings" q3="Update the docs"}
+::followups{multi="0" q1="Force-push the branch" q2="Abandon it and start over"}
 ```
 
-Now the chips are toggles. Tick as many as you want and one **Send N** button sends them as a single turn, one per line, in `q` order — the agent reads it as a person asking for three things at once.
+A single chip carries no attribute: there is nothing to pick, so it sends on one click.
 
 ### Interaction model
 
@@ -31,7 +33,7 @@ Now the chips are toggles. Tick as many as you want and one **Send N** button se
 - **Sent blocks lock** — after Send, the button reads `✓ Sent` and the block cannot be picked again.
 - **Persistent** — choices survive window reloads via `ctx.storage` (keyed `hermes.plugin.followup-chips.choices`).
 - **Per-block isolation** — every `::followups` block is keyed `sessionId::directive-source`, so a new block always starts blank and never inherits an earlier choice.
-- **Any count** — `q1..qN` parsed in numeric order, no hard limit. `multi="1"`, `"true"`, `"yes"` and `"on"` all enable multi-select.
+- **Any count** — `q1..qN` parsed in numeric order, no hard limit. A block with two or more chips is pickable by default; `multi="1"`, `"true"`, `"yes"` and `"on"` say so explicitly, and `"0"`, `"false"`, `"no"` and `"off"` opt out.
 - **Stale-composer guard** — if the chat is no longer open, the click warns instead of sending into the wrong conversation.
 
 ## The prompt rule (agent half)

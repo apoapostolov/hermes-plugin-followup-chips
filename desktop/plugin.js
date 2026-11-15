@@ -134,11 +134,16 @@ function running(key) {
   return g ? g.running : false
 }
 
-/* `multi="1"`, `multi="true"` and a bare flag all mean multi-select. */
+/* Tri-state: true = pick several, false = one click sends, null = the caller decides.
+   `multi="0"` (or false/no/off) opts a block out of picking. */
 function isMulti(value) {
   if (value === true) return true
-  if (value == null) return false
-  return /^(1|true|yes|on)$/i.test(String(value).trim())
+  if (value === false) return false
+  if (value == null) return null
+  const text = String(value).trim()
+  if (/^(0|false|no|off)$/i.test(text)) return false
+  if (/^(1|true|yes|on)$/i.test(text)) return true
+  return null
 }
 
 function Chip(props) {
@@ -300,7 +305,6 @@ function Chips(props) {
      followups block starts blank; a chosen state never leaks into the next one. */
   const source = (props && props.source) || ''
   const groupKey = (sessionId || 'current') + '::' + source
-  const multi = isMulti(attrs.multi)
   /* Any count: q1..qN in numeric order, no hard limit. */
   const qs = Object.keys(attrs)
     .filter(function (k) {
@@ -315,6 +319,10 @@ function Chips(props) {
     .filter(function (q) {
       return typeof q === 'string' && q.length > 0
     })
+  /* Two or more chips are pickable unless the directive says otherwise. A block
+     that defaulted to one-click-sends made picking two next steps send two turns
+     and queue them; multi="0" is the opt-out for genuinely exclusive options. */
+  const multi = isMulti(attrs.multi) !== false && qs.length > 1
   if (qs.length === 0) return null
 
   const picked = usePickedState(groupKey)
