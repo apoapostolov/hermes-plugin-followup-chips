@@ -111,6 +111,16 @@ class RecommendRegistrationTest(unittest.TestCase):
         self.assertEqual(tool["schema"]["name"], "followup_recommend")
         self.assertEqual(tool["schema"]["parameters"]["required"], ["options"])
 
+    def test_a_classifier_loaded_after_this_plugin_is_still_seen(self):
+        # Plugins register in dependency order and followup-chips loads before nerve,
+        # so the probe has to run per session, not once at registration.
+        ctx = FakeCtx()
+        plugin.register(ctx)
+        rule = ctx.sections[0][1]
+        self.assertNotIn("followup_recommend", rule({"platform": "local"}))
+        ctx.plugins.add("nerve")
+        self.assertIn("followup_recommend", rule({"platform": "local"}))
+
     def test_the_rule_mentions_the_classifier_only_when_one_is_loaded(self):
         without = FakeCtx()
         plugin.register(without)
@@ -126,6 +136,8 @@ class RecommendRegistrationTest(unittest.TestCase):
         ctx = FakeCtx(settings={"auto_recommend": False}, plugins=["nerve"])
         plugin.register(ctx)
         self.assertNotIn("followup_recommend", ctx.sections[0][1]({"platform": "local"}))
+        ctx.settings["auto_recommend"] = True
+        self.assertIn("followup_recommend", ctx.sections[0][1]({"platform": "local"}))
 
     def test_a_classifier_plugin_answers_through_the_tool(self):
         ctx = FakeCtx(plugins=["nerve"])

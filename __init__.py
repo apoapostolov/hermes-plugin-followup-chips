@@ -60,15 +60,15 @@ def section_text(session: dict, recommends: bool = False) -> str:
 
 
 def register(ctx) -> None:
-    # Only tell the agent to ask a classifier when there is one, and when the owner
-    # has left recommendations on. The tool itself is always registered: plugins load
-    # in an order we do not control, so probing once by name is advisory only.
-    recommends = bool(_config(ctx, RECOMMEND_SETTING, True)) and has_ranker(ctx)
-    ctx.register_system_prompt_section(
-        NAME,
-        lambda session: section_text(session, recommends=recommends),
-        max_chars=MAX_CHARS,
-    )
+    # The section is rendered when a session starts, not when the plugin loads, so
+    # the classifier probe runs there: plugins register in dependency order and
+    # `followup-chips` loads before `nerve`, which made an eager probe always False.
+    # The setting is read in the same place, so a toggle applies to the next session.
+    def section(session):
+        recommends = bool(_config(ctx, RECOMMEND_SETTING, True)) and has_ranker(ctx)
+        return section_text(session, recommends=recommends)
+
+    ctx.register_system_prompt_section(NAME, section, max_chars=MAX_CHARS)
 
     ctx.register_tool(
         name="followup_recommend",
