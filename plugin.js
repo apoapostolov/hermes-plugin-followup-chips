@@ -397,7 +397,8 @@ function isMulti(value) {
 
 /* `carry="1"` (stamped by the agent half when Carry Over Old Proposals is on)
    makes the block also draw earlier replies' unanswered chips, marked Stale. */
-function isCarry(value) {
+/* Every boolean the agent half stamps: carry="1", steer="1", accent="0". */
+function isOn(value) {
   if (value === true) return true
   if (value == null) return false
   return /^(1|true|yes|on)$/i.test(String(value).trim())
@@ -843,7 +844,10 @@ function Chips(props) {
   const carrySession =
     (typeof attrs.sid === 'string' && attrs.sid ? attrs.sid : '') ||
     (typeof sessionId === 'string' && sessionId ? sessionId : '')
-  const carryOn = isCarry(attrs.carry) && carrySession !== ''
+  const carryOn = isOn(attrs.carry) && carrySession !== ''
+  /* steer="1": the setting asks for a chip's text to reach the live turn instead
+     of queueing behind it. */
+  const steerOn = isOn(attrs.steer)
   /* This reply's number in the session, so a carried chip can say how many
      replies ago it was offered and scroll back to the one that offered it. */
   const ourN = carryOn ? carrySequence(carrySession, groupKey) : 0
@@ -888,10 +892,47 @@ function Chips(props) {
   const sent = sentOf(groupKey)
   const active = multi ? !sent : snapshot(groupKey) == null
 
-  function send(q, idx) {
+  /* Hand the text to the app, steering the live turn when the setting asks for it.
+
+     `session.steer` is the same gateway call the composer's own steer makes, and the
+     desktop protocol fills in the execution generation. It answers `queued` when a
+     running turn took the text, and `rejected` when nothing live could: rejected
+     means "queue it as the next prompt" in the wire contract, so the text is
+     submitted the ordinary way rather than dropped. Every failure lands on that
+     fallback for the same reason. */
+  function deliver(text, done) {
     var submit = host && host.composer && host.composer.submit
-    var ok = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, q) : false
-    if (ok) {
+    function ordinary() {
+      var ok = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, text) : false
+      if (ok) done()
+      else if (host && host.notify) host.notify({ kind: 'warning', message: 'Open that chat to continue' })
+    }
+    if (!steerOn || sessionId == null || sessionId === '' || !host || typeof host.request !== 'function') {
+      ordinary()
+      return
+    }
+    var settled = false
+    function finish(ok) {
+      if (settled) return
+      settled = true
+      if (ok) done()
+      else ordinary()
+    }
+    try {
+      Promise.resolve(host.request('session.steer', { session_id: sessionId, text: text }))
+        .then(function (res) {
+          finish(Boolean(res && res.status === 'queued'))
+        })
+        .catch(function () {
+          finish(false)
+        })
+    } catch (e) {
+      finish(false)
+    }
+  }
+
+  function send(q, idx) {
+    deliver(q, function () {
       const g = group(groupKey)
       g.chosen = idx
       g.running = true
@@ -903,9 +944,7 @@ function Chips(props) {
       groups.forEach(function (_, k) {
         if (k !== groupKey) emit(k)
       })
-    } else if (host && host.notify) {
-      host.notify({ kind: 'warning', message: 'Open that chat to continue' })
-    }
+    })
   }
 
   /* One turn carries every picked chip, in q order, one per line: the agent
@@ -917,9 +956,7 @@ function Chips(props) {
       })
       .join('\n')
     if (!text) return
-    var submit = host && host.composer && host.composer.submit
-    var ok = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, text) : false
-    if (ok) {
+    deliver(text, function () {
       const g = group(groupKey)
       g.sent = true
       g.running = true
@@ -930,9 +967,7 @@ function Chips(props) {
       groups.forEach(function (_, k) {
         if (k !== groupKey) emit(k)
       })
-    } else if (host && host.notify) {
-      host.notify({ kind: 'warning', message: 'Open that chat to continue' })
-    }
+    })
   }
 
   function toggle(idx) {
@@ -950,14 +985,10 @@ function Chips(props) {
   /* A stale chip sends exactly itself: it belongs to an earlier reply, so it is
      never part of this block's multi-select count. */
   function sendStale(id, label) {
-    var submit = host && host.composer && host.composer.submit
-    var ok = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, label) : false
-    if (ok) {
+    deliver(label, function () {
       retireEntry(carrySession, id)
       setActive(groupKey)
-    } else if (host && host.notify) {
-      host.notify({ kind: 'warning', message: 'Open that chat to continue' })
-    }
+    })
   }
 
   function dismissStale(id) {

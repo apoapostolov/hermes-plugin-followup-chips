@@ -100,6 +100,14 @@ When no classifier is loaded, or the owner turns **Ask the decision classifier w
 
 On, nothing is added, because accented is the default. Off, a recommended chip stays on the neutral surface until you pick it, and the Recommended tag stays in the neutral grey instead of the accent. The tag changes as well because otherwise the setting would be invisible on a pre-picked chip, where the pick tint dominates. The hook that does this is the same `transform_llm_output` used by `auto_offers`: both read their setting per reply, so a toggle applies to the next turn rather than the next plugin reload. With `auto_offers` off and the accent on, the hook reads both settings and returns the reply untouched, with no text scan at all.
 
+### Steering a live turn (agent half, off by default)
+
+A chip's text normally becomes the next user message. If the agent is still working, that message waits in the queue and only starts when the running turn ends. Turn on `send_as_steer` and the click steers the live turn instead: the text reaches the agent while it works, as one more instruction on the request in progress rather than a new one behind it.
+
+It is the same gateway call the composer's own steer makes (`session.steer`), which the desktop protocol fills with the running turn's execution generation. The gateway answers `queued` when a live turn took the text and `rejected` when nothing live could take it, and `rejected` means "queue it as the next prompt" in that contract, so a click is never lost: it falls back to the ordinary message. The same fallback covers a missing session, an older app shell without the request door, and any error.
+
+Chips are marked by attribute, `steer="1"`, because renderer code cannot read plugin settings. Steer covers all three send paths: one chip, a multi-row Send, and a carried chip.
+
 ### Carried over proposals (agent half, off by default)
 
 A reply's chips only exist while that reply is on screen. In a long queued session the next reply buries them, and a step you never answered is gone.
@@ -201,8 +209,8 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 127 tests: detector, carry stamp, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 36 cases: renderer, carry queue, with stub SDK and React
+python -m unittest discover -s tests -t .   # 152 tests: detector, stamps, recommendation, chip tool, hook, registration
+node tests/chips.test.mjs                   # 46 cases: renderer, carry queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

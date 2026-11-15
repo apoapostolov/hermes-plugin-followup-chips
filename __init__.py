@@ -16,7 +16,14 @@ desktop-plugins/, where the model emits the directive on its own.
 from __future__ import annotations
 
 from .chips import FOLLOWUP_CHIPS_SCHEMA, PENDING, attach, handler as chips_handler
-from .offers import rewrite, stamp_accent, stamp_carry, stamp_multi, stamp_session
+from .offers import (
+    rewrite,
+    stamp_accent,
+    stamp_carry,
+    stamp_multi,
+    stamp_session,
+    stamp_steer,
+)
 from .prompt_section import MAX_CHARS, chips_rule
 from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler, picks_for
 
@@ -26,6 +33,7 @@ SETTING = "auto_offers"
 RECOMMEND_SETTING = "auto_recommend"
 ACCENT_SETTING = "accent_recommended"
 CARRY_SETTING = "carry_over"
+STEER_SETTING = "send_as_steer"
 # Plugins that register the decision classifier (`nerve_assess`, or the older
 # `jev_assess` name of the same contract).
 RANKER_PLUGINS = ("nerve", "jev")
@@ -147,6 +155,10 @@ def register(ctx) -> None:
             carry = bool(ctx.get_config(CARRY_SETTING, False))
         except Exception:
             carry = False
+        try:
+            steer = bool(ctx.get_config(STEER_SETTING, False))
+        except Exception:
+            steer = False
         changed = response_text
         if auto_offers:
             converted = offer_hook(response_text=changed, platform=platform, auto_offers=True)
@@ -159,6 +171,8 @@ def register(ctx) -> None:
         # directive means a renderer from before this rule agrees with a new one.
         # Unconditional, so it cannot sit behind an early return for the settings.
         changed = stamp_multi(changed)
+        if steer:
+            changed = stamp_steer(changed)
         if not accent:
             changed = stamp_accent(changed, "0")
         if carry:

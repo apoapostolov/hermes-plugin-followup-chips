@@ -265,5 +265,29 @@ class RecommendRegistrationTest(unittest.TestCase):
         self.assertIn('carry="1"', out)
 
 
+
+class SteerSettingTest(unittest.TestCase):
+    """send_as_steer is off unless asked for, and reaches the chips when it is on."""
+
+    def hook(self, settings, text='Done.\n\n::followups{q1="A" q2="B"}', session="s1"):
+        ctx = FakeCtx(settings=settings)
+        plugin.register(ctx)
+        return ctx.hooks["transform_llm_output"](response_text=text, platform="local", session_id=session)
+
+    def test_off_by_default(self):
+        out = self.hook({})
+        self.assertNotIn('steer="1"', out or "")
+
+    def test_on_adds_the_attribute(self):
+        out = self.hook({"send_as_steer": True})
+        self.assertIn('steer="1"', out or "")
+        self.assertIn('q2="B"', out or "")
+
+    def test_it_rides_with_the_other_stamps(self):
+        out = self.hook({"send_as_steer": True, "carry_over": True})
+        self.assertIn('steer="1"', out or "")
+        self.assertIn('carry="1"', out or "")
+        self.assertIn('multi="1"', out or "")
+
 if __name__ == "__main__":
     unittest.main()

@@ -237,3 +237,27 @@ class SessionScopeTest(unittest.TestCase):
 
     def test_prose_is_left_alone(self):
         self.assertEqual(offers.stamp_session("Just a reply.", "local-aaa"), "Just a reply.")
+
+
+class SteerStampTest(unittest.TestCase):
+    """The steer setting reaches the chips as an attribute, like the others."""
+
+    def test_a_chip_block_is_marked(self):
+        out = offers.stamp_steer('Done.\n\n::followups{multi="1" q1="A" q2="B"}')
+        self.assertIn('steer="1"', out)
+        self.assertIn('multi="1"', out)
+
+    def test_an_empty_carry_block_is_left_alone(self):
+        text = 'Done.\n\n::followups{carry="1"}'
+        self.assertEqual(offers.stamp_steer(text), text, 'nothing to deliver, nothing to steer')
+
+    def test_an_explicit_zero_is_kept(self):
+        text = 'Done.\n\n::followups{steer="0" q1="A"}'
+        self.assertEqual(offers.stamp_steer(text), text)
+
+    def test_it_is_idempotent(self):
+        once = offers.stamp_steer('::followups{q1="A"}')
+        self.assertEqual(offers.stamp_steer(once), once)
+
+    def test_prose_is_untouched(self):
+        self.assertEqual(offers.stamp_steer("Just a reply."), "Just a reply.")

@@ -30,7 +30,7 @@ pkg('@hermes/plugin-sdk', {
   'index.js': [
     "export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directives'",
     '// The test mutates this object the way the app would provide it.',
-    'export const host = { composer: { submit: () => false }, notify: () => {} }',
+    'export const host = { composer: { submit: () => false }, notify: () => {}, request: null }',
   ].join('\n'),
 })
 
@@ -679,6 +679,80 @@ test('carry: pressing the pill with the keyboard sends it, Enter and Space alike
 /* ---- report ------------------------------------------------------------- */
 /* Root plugin.js is the single-file copy of this same renderer. Two copies drift
    silently, so the harness fails the moment they differ. */
+/* ---- steering a live turn ------------------------------------------------ */
+test('steer="1": the click steers the live turn and submits nothing', async () => {
+  const calls = []
+  const lines = []
+  sdk.host.request = (method, params) => {
+    calls.push([method, params])
+    return Promise.resolve({ status: 'queued' })
+  }
+  sdk.host.composer.submit = (sessionId, text) => {
+    lines.push([sessionId, text])
+    return true
+  }
+  const el = render(register({ attrs: { steer: '1', q1: 'Tighten the rule', q2: 'Leave it' }, sessionId: 'st1', source: 'st-a' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], 'session.steer')
+  assert.deepEqual(calls[0][1], { session_id: 'st1', text: 'Tighten the rule' })
+  assert.equal(lines.length, 0, 'a steered click is not also a new message')
+
+  const after = render(register({ attrs: { steer: '1', q1: 'Tighten the rule', q2: 'Leave it' }, sessionId: 'st1', source: 'st-a' }))
+  assert.match(chips(after)[0].props.className, /fu-chosen/, 'the click still reads as answered')
+  sdk.host.request = null
+  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+})
+
+test('steer="1": a rejected steer still reaches the agent as a normal message', async () => {
+  const lines = []
+  sdk.host.request = () => Promise.resolve({ status: 'rejected', delivered: false })
+  sdk.host.composer.submit = (sessionId, text) => {
+    lines.push([sessionId, text])
+    return true
+  }
+  const el = render(register({ attrs: { steer: '1', q1: 'Only step' }, sessionId: 'st2', source: 'st-b' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(lines, [['st2', 'Only step']], 'nothing live took it, so it queues as before')
+  sdk.host.request = null
+  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+})
+
+test('steer="1": a failing request falls back instead of losing the click', async () => {
+  const lines = []
+  sdk.host.request = () => Promise.reject(new Error('gateway down'))
+  sdk.host.composer.submit = (sessionId, text) => {
+    lines.push([sessionId, text])
+    return true
+  }
+  const el = render(
+    register({ attrs: { steer: '1', multi: '1', q1: 'A step', q2: 'Another' }, sessionId: 'st3', source: 'st-c' })
+  )
+  chips(el)[0].props.onClick()
+  const rerendered = render(
+    register({ attrs: { steer: '1', multi: '1', q1: 'A step', q2: 'Another' }, sessionId: 'st3', source: 'st-c' })
+  )
+  send(rerendered).props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(lines, [['st3', 'A step']], 'the multi send fell back to the composer')
+  sdk.host.request = null
+  sdk.host.composer.submit = (sessionId, text) => { submits.push([sessionId, text]); return true }
+})
+
+test('without steer="1" the request door is never used', async () => {
+  let asked = 0
+  sdk.host.request = () => { asked += 1; return Promise.resolve({ status: 'queued' }) }
+  submits.length = 0
+  const el = render(register({ attrs: { q1: 'Normal' }, sessionId: 'st4', source: 'st-d' }))
+  chips(el)[0].props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(asked, 0)
+  assert.deepEqual(submits, [['st4', 'Normal']])
+  sdk.host.request = null
+})
+
 test('root plugin.js is byte-identical to desktop/plugin.js', () => {
   const root = readFileSync(resolve(here, '..', 'plugin.js'), 'utf8')
   const desktop = readFileSync(pluginSource, 'utf8')

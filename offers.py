@@ -299,6 +299,30 @@ def session_fingerprint(session: str) -> str:
         return ""
 
 
+def stamp_steer(text: str) -> str:
+    """Mark the block's chips as steering the live turn.
+
+    The renderer cannot read plugin settings, so the setting travels as an attribute.
+    Only meaningful on the chip row itself: a steer needs text to deliver, and the
+    empty block carry adds has none, so it is left untouched.
+    """
+    if not isinstance(text, str) or not text or not DIRECTIVE_RE.search(text):
+        return text
+
+    def one(match: "re.Match[str]") -> str:
+        body = match.group(2)
+        if re.search(r"\bsteer\s*=", body):
+            return match.group(0)
+        if len(re.findall(r"\bq\d+\s*=", body)) < 1:
+            return match.group(0)
+        return match.group(1) + 'steer="1" ' + body + match.group(3)
+
+    try:
+        return _DIRECTIVE_BODY_RE.sub(one, text)
+    except Exception:  # a hook must never break a reply
+        return text
+
+
 def stamp_multi(text: str) -> str:
     """Make two or more chips pickable unless the directive already says otherwise.
 

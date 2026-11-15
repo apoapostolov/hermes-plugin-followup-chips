@@ -1,6 +1,6 @@
 name: followup-chips
 label: Follow-up Chips
-version: 1.0.7
+version: 1.0.8
 author: nuonrg
 homepage: https://github.com/nuonrg/hermes-plugin-followup-chips
 description: >
@@ -19,7 +19,8 @@ description: >
   and are simply never marked. Every chip in a block shares one width, set
   by the longest option, so a row of short actions still reads as a column. An
   optional auto_offers hook converts an offer the model wrote in prose anyway into
-  the same chips before the reply is stored. With carry_over on, a reply also shows
+  the same chips before the reply is stored. With send_as_steer on, a chip steers the
+  live turn instead of queueing behind it. With carry_over on, a reply also shows
   the proposals earlier replies left unanswered, each labelled with how many replies
   back it was offered and an X to drop it, so a long queued session cannot bury them. Hermes arc-border hover, the arc
   keeps running while the agent answers and rests on a checkmark when done. Per-block
@@ -59,6 +60,21 @@ config_schema:
       dark. Turn it off and every chip stays on the neutral surface until you pick
       it; the Recommended tag stays either way. This one reaches the chips by
       attribute (accent="0"), because renderer code cannot read plugin settings.
+  send_as_steer:
+    type: bool
+    default: false
+    label: Send chip results as a steer
+    description: >
+      A chip's text normally becomes the next user message, so if the agent is
+      still working it queues behind the running turn and only starts when that
+      turn ends. With this on, the click steers the live turn instead: the text
+      reaches the agent while it works, as one more instruction on the current
+      request rather than a new one in the queue. It is the same gateway call the
+      composer's own steer uses. When nothing is running there is nothing to
+      steer, so the text is sent as an ordinary message rather than dropped. Off
+      by default, because a steer changes the answer in progress. This reaches
+      the chips by attribute (steer="1"), because renderer code cannot read
+      plugin settings.
   carry_over:
     type: bool
     default: false
