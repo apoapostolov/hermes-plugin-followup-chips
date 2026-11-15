@@ -532,8 +532,12 @@ test('carry: the X retires a proposal and a reload does not bring it back', () =
 
 test('carry: answering a block retires its own proposals', () => {
   const s = 'carry-answer'
-  const first = render(register({ attrs: { carry: '1', q1: 'A', q2: 'B' }, sessionId: s, source: 'a1' }))
+  /* Two chips are pickable by default, so answering means picking then sending. */
+  const attrs = { carry: '1', q1: 'A', q2: 'B' }
+  let first = render(register({ attrs, sessionId: s, source: 'a1' }))
   freshChips(first)[0].props.onClick()
+  first = render(register({ attrs, sessionId: s, source: 'a1' }))
+  send(first).props.onClick()
   /* Nothing is carried any more, so the next reply draws no chips line at all. */
   const next = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'a2' }))
   assert.equal(next, null, 'an answered reply is not carried')
