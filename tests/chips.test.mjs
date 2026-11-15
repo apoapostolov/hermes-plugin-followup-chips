@@ -630,14 +630,50 @@ test('carry: proposals stay inside their own session', () => {
   assert.equal(other, null)
 })
 
-test('carry: the queue is capped so a long session cannot grow without bound', () => {
+test('carry: the queue is capped, keeps the newest, and reads newest first at the cap', () => {
   const s = 'carry-cap'
   const many = { carry: '1' }
   for (let i = 1; i <= 33; i += 1) many['q' + i] = 'Option ' + i
   render(register({ attrs: many, sessionId: s, source: 'cap1' }))
   const el = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'cap2' }))
-  assert.equal(staleRows(el).length, 30, 'keeps the newest 30')
-  assert.equal(label(staleButton(staleRows(el)[0])), 'Option 4', 'the oldest four were retired')
+  const labels = staleRows(el).map((row) => label(staleButton(row)))
+  assert.equal(labels.length, 30, 'keeps 30')
+  assert.equal(labels[0], 'Option 33', 'the newest is shown first at the cap')
+  assert.equal(labels[labels.length - 1], 'Option 4', 'the three oldest were retired')
+})
+
+test('carry: at the cap a recommended proposal is not retired', () => {
+  const s = 'carry-rec'
+  const many = { carry: '1', rec: '1,2,3' }
+  for (let i = 1; i <= 33; i += 1) many['q' + i] = 'Option ' + i
+  render(register({ attrs: many, sessionId: s, source: 'rc1' }))
+  const el = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'rc2' }))
+  const labels = staleRows(el).map((row) => label(staleButton(row)))
+  assert.equal(labels.length, 30)
+  assert.ok(labels.includes('Option 1'), 'the oldest recommended survives')
+  assert.ok(labels.includes('Option 2'))
+  assert.ok(labels.includes('Option 3'))
+  assert.ok(!labels.includes('Option 4'), 'the oldest unmarked goes first')
+  assert.ok(!labels.includes('Option 6'))
+  assert.ok(labels.includes('Option 7'))
+})
+
+test('carry: once everything is recommended the oldest recommended retires', () => {
+  const s = 'carry-allrec'
+  const many = { carry: '1' }
+  const all = []
+  for (let i = 1; i <= 33; i += 1) {
+    many['q' + i] = 'Option ' + i
+    all.push(i)
+  }
+  many.rec = all.join(',')
+  render(register({ attrs: many, sessionId: s, source: 'ar1' }))
+  const el = render(register({ attrs: { carry: '1' }, sessionId: s, source: 'ar2' }))
+  const labels = staleRows(el).map((row) => label(staleButton(row)))
+  assert.equal(labels.length, 30)
+  assert.ok(!labels.includes('Option 1'), 'the oldest recommendation retires next')
+  assert.ok(labels.includes('Option 33'), 'and the newest recommended is shown')
+  assert.equal(labels[0], 'Option 33')
 })
 
 

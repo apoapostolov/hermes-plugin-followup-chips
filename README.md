@@ -144,6 +144,8 @@ Chips are marked by attribute, `steer="1"`, because renderer code cannot read pl
 
 A reply's chips only exist while that reply is on screen. In a long queued session the next reply buries them, and a step you never answered is gone.
 
+The queue is capped at thirty, and what it gives up is chosen rather than first-in-first-out: tombstones go first, then the oldest proposal that was never recommended, and only when the queue is nothing but recommendations does an old recommendation go. So the newest work survives, plus everything the classifier thought worth doing. Once the cap is reached the row also reads newest first, because the proposals nearest this reply are the ones still worth a click.
+
 **Carry Over Old Proposals** (`carry_over`, off by default) keeps them. Every reply then also draws the proposals earlier replies left unanswered. Each carried chip says how far back it came from (`2 responses ago`) and carries an **✕** at its end to drop it; clicking the age jumps the transcript back to the reply that offered it.
 
 | Reply | Proposes | Shows |
@@ -250,7 +252,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 
 ```
 python -m unittest discover -s tests -t .   # 216 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 66 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
+node tests/chips.test.mjs                   # 68 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

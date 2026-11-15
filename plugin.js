@@ -166,9 +166,14 @@ function emptyCarryState() {
   return { v: CARRY_VERSION, next: 1, blocks: {}, entries: [] }
 }
 
-/* Cap the log so a long session cannot grow storage without bound: tombstones go
-   first, then the oldest live entries. The reply numbers stay in `blocks`, so a
-   trimmed reply still counts in "responses ago". */
+/* Cap the log so a long session cannot grow storage without bound.
+
+   Order of sacrifice, and it is not first-in-first-out: tombstones go first, then the
+   oldest proposal nobody recommended, and only when the queue is nothing but
+   recommendations does an old recommendation go. What survives is therefore the newest
+   work plus everything the classifier thought worth doing, because a suggestion about to
+   be answered is worth more than one the user scrolled past four replies ago. The reply
+   numbers stay in `blocks`, so a trimmed reply still counts in "responses ago". */
 function trimCarry(state) {
   if (state.entries.length <= CARRY_LIMIT) return state
   const out = state.entries.slice()
@@ -180,10 +185,22 @@ function trimCarry(state) {
         break
       }
     }
+    if (idx === -1) {
+      /* Entries are appended in time order, so the first unmarked one is the oldest. */
+      idx = out.findIndex(function (e) {
+        return !e.rec
+      })
+    }
     out.splice(idx === -1 ? 0 : idx, 1)
   }
   state.entries = out
   return state
+}
+
+/* True once trimming has started, which is the moment the queue stops reading in the
+   order it was offered and starts reading newest first. */
+function carryIsFull(state) {
+  return state.entries.length >= CARRY_LIMIT
 }
 
 /* 1.0.4 stored a bare array with no reply numbers. Give each block the number of
@@ -284,17 +301,26 @@ function carrySequence(sessionId, blockKey) {
   return n
 }
 
-function registerProposals(sessionId, blockKey, labels, n) {
+function registerProposals(sessionId, blockKey, labels, n, recommended) {
   const state = carryState(sessionId)
   const entries = state.entries.slice()
   let changed = false
+  const marked = Array.isArray(recommended) ? recommended : []
   labels.forEach(function (label, i) {
     const id = blockKey + '#' + i
     const seen = entries.some(function (e) {
       return e.id === id
     })
     if (!seen) {
-      entries.push({ id: id, key: blockKey, i: i, label: label, n: n, gone: false })
+      entries.push({
+        id: id,
+        key: blockKey,
+        i: i,
+        label: label,
+        n: n,
+        gone: false,
+        rec: marked.indexOf(i) !== -1,
+      })
       changed = true
     }
   })
@@ -351,8 +377,15 @@ function clearCarried(sessionId, keepKey) {
 /* What this block draws as carried: everything still unanswered that it did not
    offer itself, oldest first, each with the number of the reply that offered it. */
 function staleFor(sessionId, blockKey) {
-  return carryState(sessionId).entries.filter(function (e) {
+  const state = carryState(sessionId)
+  const live = state.entries.filter(function (e) {
     return !e.gone && e.key !== blockKey
+  })
+  if (!carryIsFull(state)) return live
+  /* At the cap the row is a queue with a memory limit already in force, so it reads
+     newest first: the proposals nearest this reply are the ones still worth a click. */
+  return live.slice().sort(function (a, b) {
+    return (b.n || 0) - (a.n || 0) || (b.i || 0) - (a.i || 0)
   })
 }
 
@@ -941,21 +974,22 @@ function Chips(props) {
     },
     [carryOn, carrySession]
   )
-  const qsKey = qs.join('\n')
-  /* Register what this reply proposes, once, so later replies can carry it. */
-  useEffect(
-    function () {
-      if (carryOn && qs.length > 0) registerProposals(carrySession, groupKey, qs, ourN)
-    },
-    [carryOn, carrySession, groupKey, qsKey, ourN]
-  )
-
   const rec = parseRec(attrs.rec, qs.length)
   /* Alternate groups: picking one member clears the others, so a decision with
      two routes in it can never be sent as both. */
   const alt = parseAlt(attrs.alt, qs.length)
   /* risky="1,3": the classifier judged those steps able to damage or break something. */
   const risky = parseRec(attrs.risky, qs.length)
+
+  const qsKey = qs.join('\n')
+  /* Register what this reply proposes, once, so later replies can carry it. */
+  useEffect(
+    function () {
+      if (carryOn && qs.length > 0) registerProposals(carrySession, groupKey, qs, ourN, rec)
+    },
+    [carryOn, carrySession, groupKey, qsKey, ourN]
+  )
+
   const accent = accentOn(attrs.accent)
   /* Recommended options start picked, exactly once. A stored entry or any later
      tick counts as touched, so a user who unticks them is never overruled by the
