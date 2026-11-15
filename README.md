@@ -4,7 +4,7 @@
 
 Clickable follow-up suggestion chips for Hermes desktop replies. 54-second demo: `demo.mp4` (also posted with the contest entry).
 
-Latest release: **[v1.0.11](https://github.com/apoapostolov/hermes-plugin-followup-chips/releases/tag/v1.0.11)** — every feature, the settings table and the install steps on one page.
+Latest release: **[releases/latest](https://github.com/apoapostolov/hermes-plugin-followup-chips/releases/latest)** — every feature, the settings table and the install steps on one page. The link follows the newest release, so it does not go stale when one ships.
 
 ## What it does
 
