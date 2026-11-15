@@ -219,49 +219,35 @@ def plan(text: str) -> tuple[str, list[str]] | None:
     return "\n\n".join(head).strip(), options
 
 
-def directive(options: list[str], multi: bool | None = True) -> str:
+def directive(options: list[str], multi: bool | None = None, rec: str = "") -> str:
     """The paragraph the renderer reads.
 
-    Several chips are pickable so the user can send them as one turn; `multi=False`
-    writes the opt-out for an exclusive choice, where one click sends. A single chip
-    carries no attribute at all because there is nothing to pick.
+    Two or more chips are pickable, so the user can send them as one turn, and that
+    is the default: ``multi=None`` means pickable whenever there is more than one
+    option. A caller that knows better passes True or False, because a tool call can
+    register three exclusive options and a directive that guessed from the count
+    would let the user send two contradicting steps as one turn. ``multi=False`` is
+    the opt-out, and a single chip carries no attribute because there is nothing to
+    pick.
 
-    ["Push it", "Open the PR"] → '::followups{multi="1" q1="Push it" q2="Open the PR"}'
+    ``rec`` is already-validated digits ("1,3") and rides the same brace as an attribute.
+
+    ["Push it", "Open the PR"] -> '::followups{multi="1" q1="Push it" q2="Open the PR"}'
     """
     attrs = " ".join(
-        'q{}="{}"'.format(i + 1, _sane(option)) for i, option in enumerate(options)
+        'q{}=\"{}\"'.format(i + 1, _sane(option)) for i, option in enumerate(options)
     )
+    if multi is None:
+        multi = len(options) > 1
     if len(options) < 2:
         head = ""
+    elif multi:
+        head = 'multi="1" '
     else:
-        head = 'multi="1" ' if multi is not False else 'multi="0" '
+        head = 'multi="0" '
+    if rec:
+        head += 'rec="{}" '.format(rec)
     return "::followups{" + head + attrs + "}"
-
-
-def stamp_multi(text: str) -> str:
-    """Make two or more chips pickable unless the directive already says otherwise.
-
-    The renderer defaults to pickable for a multi-option block, but writing the
-    attribute means a renderer from before that rule agrees with a new one. A
-    directive that already carries a `multi` (including the opt-out) is left as it
-    is, and a single chip gets nothing because there is nothing to pick. Idempotent,
-    and it never touches prose: no directive means the text comes back unchanged.
-    """
-    if not isinstance(text, str) or not text or not DIRECTIVE_RE.search(text):
-        return text
-
-    def one(match: "re.Match[str]") -> str:
-        body = match.group(2)
-        if re.search(r"\bmulti\s*=", body):
-            return match.group(0)
-        if len(re.findall(r"\bq\d+\s*=", body)) < 2:
-            return match.group(0)
-        return match.group(1) + 'multi="1" ' + body + match.group(3)
-
-    try:
-        return _DIRECTIVE_BODY_RE.sub(one, text)
-    except Exception:  # a hook must never break a reply
-        return text
 
 
 # One directive paragraph, balanced-ish: the renderer takes it to the closing brace.
@@ -311,6 +297,32 @@ def session_fingerprint(session: str) -> str:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
     except Exception:  # a hook must never break a reply
         return ""
+
+
+def stamp_multi(text: str) -> str:
+    """Make two or more chips pickable unless the directive already says otherwise.
+
+    The renderer defaults to pickable for a multi-option block, but writing the
+    attribute means a renderer from before that rule agrees with a new one. A
+    directive that already carries a `multi` (including the opt-out) is left as it
+    is, and a single chip gets nothing because there is nothing to pick. Idempotent,
+    and it never touches prose: no directive means the text comes back unchanged.
+    """
+    if not isinstance(text, str) or not text or not DIRECTIVE_RE.search(text):
+        return text
+
+    def one(match: "re.Match[str]") -> str:
+        body = match.group(2)
+        if re.search(r"\bmulti\s*=", body):
+            return match.group(0)
+        if len(re.findall(r"\bq\d+\s*=", body)) < 2:
+            return match.group(0)
+        return match.group(1) + 'multi="1" ' + body + match.group(3)
+
+    try:
+        return _DIRECTIVE_BODY_RE.sub(one, text)
+    except Exception:  # a hook must never break a reply
+        return text
 
 
 def stamp_session(text: str, session: str = "") -> str:

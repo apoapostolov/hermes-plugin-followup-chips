@@ -6,7 +6,7 @@ Clickable follow-up suggestion chips for Hermes desktop replies. 54-second demo:
 
 ## What it does
 
-End any reply with a directive:
+The agent registers its follow-up options, either by calling the `followup_chips` tool or by ending the reply with a directive:
 
 ```
 ::followups{q1="First suggestion?" q2="Second one?" q3="Third?"}
@@ -121,9 +121,29 @@ Two mechanics are worth knowing, because both come from the plugin's split halve
 
 Because that empty block is a rewrite of the reply text, it applies on Desktop only; other surfaces never see the directive.
 
+## Chips from a tool call (agent half)
+
+A model writing `::followups` by hand has to escape quotes, keep braces balanced, remember `multi` and `rec`, and never wrap the line in a sentence. Each of those is a way to ship a chip row that renders wrong or not at all, and it arrives as prose in the transcript instead of an error.
+
+`followup_chips` moves the options out of the text and into the call's arguments:
+
+```
+followup_chips(options=["Push the branch", "Tag a release", "Write the notes"], multi=False, recommend=True)
+→ Chips registered: 3 options (one choice), recommended 1. They render under this reply;
+  do not also write a ::followups line.
+```
+
+Options are validated on the way in: 2 to 6 of them, whitespace collapsed, case-insensitive duplicates dropped, 120 characters each (longer labels are truncated with an ellipsis rather than rejected). `multi` is explicit, so three exclusive options stay exclusive instead of defaulting to a row the user can send two of at once. `recommend=true` runs the same classifier and policy as `followup_recommend` in the same call and puts its verdict in the `rec` attribute.
+
+The reply hook that already stamps `accent` and `carry` appends the directive from the registration before the reply is stored, so a tool-built block is identical to a written one and inherits every setting. The prose stays prose.
+
+A registration belongs to one reply. It is consumed by the next reply in that session, dropped off Hermes Desktop (where the directive would arrive as raw text), dropped when the reply already carries a directive of its own because a model that wrote one meant it, and expires after 15 minutes if the turn dies before the hook runs. A second `followup_chips` call in the same turn replaces the first, which is what a model retrying after a validation message expects.
+
+The text directive is still supported and is what the prompt rule falls back to, because a model without tool calling still has to be able to produce chips.
+
 ## The prompt rule (agent half)
 
-A directive only appears if the model writes it. So the plugin registers one system-prompt section (`prompt_section.py`) telling the agent: when the next step is a choice, end with the directive instead of asking in prose. It forbids the phrases that leave a reply dead-ended — "say the word and I'll…", "want me to…?", "shall I…?", "let me know if…" — and asks for 2 to 5 imperative options. On surfaces that cannot draw chips (Telegram, the CLI) the section asks for a numbered list instead, so no raw directive line is ever printed there.
+The plugin registers one system-prompt section (`prompt_section.py`) telling the agent that when the next step is a choice it calls `followup_chips` with 2 to 5 imperative options and writes no directive itself, falling back to the directive only where tool calling is unavailable. It forbids the phrases that leave a reply dead-ended — "say the word and I'll…", "want me to…?", "shall I…?", "let me know if…" — and asks for 2 to 5 imperative options. On surfaces that cannot draw chips (Telegram, the CLI) the section asks for a numbered list instead, so no raw directive line is ever printed there.
 
 Nothing is sent anywhere; the section is text frozen into the session prompt.
 
@@ -157,12 +177,13 @@ A skill can emit text; it cannot render interactive UI in the transcript, wire c
 
 - `desktop/plugin.js` — the renderer (default export `{ id, register }`), the copy the manifest entrypoints
 - `plugin.js` — the same file for single-file installs; `tests/chips.test.mjs` fails if the two drift
-- `__init__.py` — the agent half: the prompt section, the recommend tool, the optional `transform_llm_output` hook
+- `__init__.py` — the agent half: the prompt section, both tools, the optional `transform_llm_output` hook
 - `prompt_section.py` — the chip rule, per surface, with the classifier sentence when one is loaded
 - `offers.py` — the closing-offer detector
-- `recommend.py` — `followup_recommend`: the classifier call and the pick policy
+- `chips.py` — `followup_chips`: option validation, the per-session pending store, and the reply attach
+- `recommend.py` — the classifier call and the pick policy, shared by both tools
 - `plugin.yaml` — manifest, `provides_tools` / `provides_hooks`, and the four settings: `auto_offers`, `auto_recommend`, `accent_recommended`, `carry_over`
-- `tests/` — detector, carry stamp, recommendation and registration tests (Python), renderer harness (Node, no dependencies)
+- `tests/` — detector, carry stamp, recommendation, chip-tool and registration tests (Python), renderer harness (Node, no dependencies)
 
 ## Install
 
@@ -180,8 +201,8 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 76 tests: detector, carry stamp, recommendation, hook, registration
-node tests/chips.test.mjs                   # 32 cases: renderer, carry queue, with stub SDK and React
+python -m unittest discover -s tests -t .   # 127 tests: detector, carry stamp, recommendation, chip tool, hook, registration
+node tests/chips.test.mjs                   # 36 cases: renderer, carry queue, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

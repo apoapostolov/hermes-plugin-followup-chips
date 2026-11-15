@@ -316,15 +316,8 @@ def _answers_from(result: object) -> dict | None:
     return answers if isinstance(answers, dict) and answers else None
 
 
-def recommend(dispatch, options: list[str], context: str = "") -> str:
-    """Ask the classifier, through `dispatch(tool_name, args)`, and phrase the answer.
-
-    `dispatch` is ctx.dispatch_tool: it returns the handler's JSON string and may raise.
-    """
-    clean = [str(option).strip() for option in options if str(option).strip()]
-    if len(clean) < 2:
-        return "A recommendation needs at least two options; leave rec out."
-    clean = clean[:MAX_OPTIONS]
+def _ask(dispatch, clean: list[str], context: str) -> dict | None:
+    """One classifier call: the answers map, or None when no ranker answered."""
     args = {
         "state": state_for(clean, context),
         "questions": questions(clean),
@@ -335,7 +328,38 @@ def recommend(dispatch, options: list[str], context: str = "") -> str:
         except Exception:  # a missing or broken classifier is not a reply failure
             continue
         if answers:
-            return reply(clean, answers)
+            return answers
+    return None
+
+
+def picks_for(dispatch, options: list[str], context: str = "") -> list[int]:
+    """The 1-based option numbers worth taking now, empty when nothing clears.
+
+    The same policy as :func:`recommend`, without the sentence meant for a model: a
+    tool that draws its own chips needs the numbers, not the instruction to write
+    them into a directive.
+    """
+    clean = [str(option).strip() for option in options if str(option).strip()][:MAX_OPTIONS]
+    if len(clean) < 2:
+        return []
+    answers = _ask(dispatch, clean, context)
+    if not answers:
+        return []
+    return [index + 1 for index in picks(answers, len(clean), clean)]
+
+
+def recommend(dispatch, options: list[str], context: str = "") -> str:
+    """Ask the classifier, through `dispatch(tool_name, args)`, and phrase the answer.
+
+    `dispatch` is ctx.dispatch_tool: it returns the handler's JSON string and may raise.
+    """
+    clean = [str(option).strip() for option in options if str(option).strip()]
+    if len(clean) < 2:
+        return "A recommendation needs at least two options; leave rec out."
+    clean = clean[:MAX_OPTIONS]
+    answers = _ask(dispatch, clean, context)
+    if answers:
+        return reply(clean, answers)
     return (
         "No decision classifier answered (%s), so leave rec out and offer the chips as they are."
         % ", ".join(RANKERS)

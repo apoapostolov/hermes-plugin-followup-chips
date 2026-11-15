@@ -105,7 +105,7 @@ class RecommendRegistrationTest(unittest.TestCase):
     def test_the_recommend_tool_is_always_registered(self):
         ctx = FakeCtx()
         plugin.register(ctx)
-        self.assertEqual(list(ctx.tools), ["followup_recommend"])
+        self.assertEqual(sorted(ctx.tools), ["followup_chips", "followup_recommend"])
         tool = ctx.tools["followup_recommend"]
         self.assertEqual(tool["toolset"], "followup_chips")
         self.assertEqual(tool["schema"]["name"], "followup_recommend")

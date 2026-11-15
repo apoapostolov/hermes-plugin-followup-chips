@@ -1,8 +1,11 @@
 """followup-chips: clickable follow-up chips, the rule that fills them, and the picker.
 
 The desktop half (desktop/plugin.js) draws a `::followups{…}` paragraph as chips
-under a reply. This half gives the model the rule that ends a choice with that
-directive, converts a closing offer it wrote in prose anyway (opt-in), and exposes
+under a reply. This half gives the model two ways to fill it: `followup_chips`
+registers the options as tool arguments and the reply hook appends the directive,
+which needs no escaping and cannot be malformed, while the bundled prompt rule keeps
+the text directive as the fallback for a model that cannot call tools. It also
+converts a closing offer written in prose anyway (opt-in), and exposes
 `followup_recommend`, which asks the decision classifier which of the options are
 worth taking now so the chips arrive pre-picked.
 
@@ -12,9 +15,10 @@ desktop-plugins/, where the model emits the directive on its own.
 
 from __future__ import annotations
 
+from .chips import FOLLOWUP_CHIPS_SCHEMA, PENDING, attach, handler as chips_handler
 from .offers import rewrite, stamp_accent, stamp_carry, stamp_multi, stamp_session
 from .prompt_section import MAX_CHARS, chips_rule
-from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler
+from .recommend import FOLLOWUP_RECOMMEND_SCHEMA, handler as recommend_handler, picks_for
 
 NAME = "followup-chips"
 TOOLSET = NAME.replace("-", "_")
@@ -85,21 +89,51 @@ def register(ctx) -> None:
         emoji="🎯",
     )
 
+    # The structured channel: the model passes the options as arguments and the hook
+    # below appends the directive to the reply it is about to write. Reading settings
+    # and probing the classifier happen per call, because plugins register in
+    # dependency order and this one loads before the classifier does.
+    def wants_recommend() -> bool:
+        return bool(_config(ctx, RECOMMEND_SETTING, True)) and has_ranker(ctx)
+
+    def classify(options, context_line):
+        return picks_for(ctx.dispatch_tool, options, context_line)
+
+    ctx.register_tool(
+        name="followup_chips",
+        toolset=TOOLSET,
+        schema=FOLLOWUP_CHIPS_SCHEMA,
+        handler=chips_handler(PENDING, ctx.dispatch_tool, classify, wants_recommend),
+        description=(
+            "Register the chips under the reply you are about to write, instead of writing "
+            "a ::followups directive. Options are validated; the chips attach to that reply "
+            "automatically, and recommend=true marks the ones worth taking now."
+        ),
+        emoji="🧩",
+    )
+
     def transform(
         response_text: str = "", platform: str = "", session_id: str = "", **kwargs
     ) -> str | None:
-        """Four independent jobs, each gated by its own setting, read per call.
+        """Five jobs, each gated by its own rule, read per call.
 
+        - followup_chips: a registration from the tool becomes the reply's directive.
         - auto_offers: a closing offer written in prose becomes a directive.
         - accent_recommended off: the directive gets accent="0", because the
           renderer cannot read plugin settings and the default is accented.
         - carry_over on: the directive gets carry="1", and a reply with no chips
           gets one empty block so its message still shows the unanswered ones.
-        - always: the session fingerprint goes into the directive, so a chat only
-          ever carries its own proposals.
+        - always: pickability for two or more chips, and the chat fingerprint, so a
+          chat only ever carries its own proposals.
+
+        The tool's chips are attached before the stamps run, so the directive they
+        produce picks up the accent and carry attributes exactly like a written one.
+        A reply that already carries a directive keeps it; the registration is
+        dropped rather than doubling the block.
         """
         del kwargs
         if not isinstance(response_text, str) or not response_text:
+            PENDING.forget(session_id)
             return None
         try:
             auto_offers = bool(ctx.get_config(SETTING, False))
@@ -118,6 +152,9 @@ def register(ctx) -> None:
             converted = offer_hook(response_text=changed, platform=platform, auto_offers=True)
             if converted:
                 changed = converted
+        attached = attach(changed, session_id, platform=platform, pending=PENDING)
+        if attached:
+            changed = attached
         # Pickability is the default for two or more chips: writing it into the
         # directive means a renderer from before this rule agrees with a new one.
         # Unconditional, so it cannot sit behind an early return for the settings.
