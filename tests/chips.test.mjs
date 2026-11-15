@@ -369,7 +369,9 @@ test('junk rec values are ignored instead of trusted', () => {
 /* ---- polish: accent tint and one width for the row ---------------------- */
 
 test('a recommended chip is accented by default, even when it is not picked', () => {
-  const el = render(register({ attrs: { rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p1', source: 'src-p1' }))
+  const el = render(
+    register({ attrs: { multi: '0', rec: '2', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p1', source: 'src-p1' })
+  )
   const recommended = chips(el)[1]
   assert.ok(recommended.props.className.includes('fu-recommended'), 'recommended chip carries the accent class')
   assert.ok(/color-mix\(in srgb, var\(--dt-primary[\s\S]*70%/.test(recommended.props.style.border), 'accent border: ' + recommended.props.style.border)
@@ -378,12 +380,22 @@ test('a recommended chip is accented by default, even when it is not picked', ()
 
 test('accent="0" drops the tint but keeps the Recommended tag', () => {
   const el = render(
-    register({ attrs: { rec: '2', accent: '0', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p2', source: 'src-p2' })
+    register({ attrs: { multi: '0', rec: '2', accent: '0', q1: 'Push it', q2: 'Tag it' }, sessionId: 'p2', source: 'src-p2' })
   )
   assert.ok(!chips(el)[1].props.className.includes('fu-recommended'), 'no accent class at all')
   assert.ok(chips(el)[1].props.style.border.includes('ui-stroke-secondary'), 'neutral border')
   assert.equal(chips(el)[1].props.style.background, 'transparent')
   assert.ok(badge(chips(el)[1]), 'the tag stays')
+  assert.ok(
+    badge(chips(el)[1]).style.color.includes('ui-text-secondary'),
+    'the tag goes neutral too: ' + badge(chips(el)[1]).style.color
+  )
+})
+
+test('accent on, the tag carries the accent', () => {
+  const el = render(register({ attrs: { rec: '1', q1: 'A', q2: 'B' }, sessionId: 'p2b', source: 'src-p2b' }))
+  assert.ok(badge(chips(el)[0]).style.color.includes('--dt-primary'), 'accented tag: ' + badge(chips(el)[0]).style.color)
+  assert.equal(badge(chips(el)[0]).style.marginLeft, 'auto', 'tags line up on the right edge')
 })
 
 test('accent accepts the same spellings as multi, and junk leaves it on', () => {

@@ -51,7 +51,7 @@ Every chip in a block shares one width, the width of its longest option, so a ro
 - **Stale-composer guard** — if the chat is no longer open, the click warns instead of sending into the wrong conversation.
 - **Recommended** — `rec="1,3"` tags those chips and, in multi-select, ticks them once. Any tick or a sent block ends the defaults, so un-ticking a recommendation is never undone on the next render, and a reload keeps what you chose.
 - **Equal widths** — the row is one grid column sized to its longest chip, so every pill stretches to that width. A very long option is capped by the row and its text wraps inside the pill. The tick slot is laid out on every chip and only hidden, so picking one does not resize the row.
-- **Accent** — a recommended chip keeps the accent border and tint while it is unpicked, and the tag sits on the pill's right edge, lining up down the column. Picked chips are the strongest tint of the three states (rest, recommended, picked).
+- **Accent** — a recommended chip keeps the accent border and tint while it is unpicked, and the tag sits on the pill's right edge, lining up down the column. Picked chips are the strongest tint of the three states (rest, recommended, picked). With the accent setting off, the tag turns neutral grey as well, so turning it off is visible even on a chip that starts picked.
 
 ### Recommendations are optional and need the `nerve` plugin
 
@@ -98,7 +98,7 @@ When no classifier is loaded, or the owner turns **Ask the decision classifier w
 ::followups{accent="0" rec="1" q1="Push the branch"}
 ```
 
-On, nothing is added, because accented is the default. Off, a recommended chip stays on the neutral surface until you pick it and the Recommended tag stays. The hook that does this is the same `transform_llm_output` used by `auto_offers`: both read their setting per reply, so a toggle applies to the next turn rather than the next plugin reload. With `auto_offers` off and the accent on, the hook reads both settings and returns the reply untouched, with no text scan at all.
+On, nothing is added, because accented is the default. Off, a recommended chip stays on the neutral surface until you pick it, and the Recommended tag stays in the neutral grey instead of the accent. The tag changes as well because otherwise the setting would be invisible on a pre-picked chip, where the pick tint dominates. The hook that does this is the same `transform_llm_output` used by `auto_offers`: both read their setting per reply, so a toggle applies to the next turn rather than the next plugin reload. With `auto_offers` off and the accent on, the hook reads both settings and returns the reply untouched, with no text scan at all.
 
 ## The prompt rule (agent half)
 
