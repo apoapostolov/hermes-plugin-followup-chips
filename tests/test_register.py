@@ -27,10 +27,12 @@ OFFER = "Branch is pushed.\n\nWant me to open the PR?"
 
 
 class FakeCtx:
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, plugins=()):
         self.settings = settings or {}
+        self.plugins = set(plugins)
         self.sections = []
         self.hooks = {}
+        self.tools = {}
 
     def register_system_prompt_section(self, section_id, content, **kwargs):
         self.sections.append((section_id, content, kwargs))
@@ -38,8 +40,17 @@ class FakeCtx:
     def register_hook(self, name, callback):
         self.hooks[name] = callback
 
+    def register_tool(self, name=None, toolset=None, schema=None, handler=None, **kwargs):
+        self.tools[name] = {"toolset": toolset, "schema": schema, "handler": handler}
+
+    def has_plugin(self, plugin_id):
+        return plugin_id in self.plugins
+
     def get_config(self, key, default=None):
         return self.settings.get(key, default)
+
+    def dispatch_tool(self, name, args, **kwargs):
+        raise RuntimeError("no classifier in tests")
 
 
 class RegisterTest(unittest.TestCase):
@@ -88,6 +99,49 @@ class RegisterTest(unittest.TestCase):
 
     def test_offer_hook_ignores_non_string_replies(self):
         self.assertIsNone(plugin.offer_hook(response_text=None, platform="local", auto_offers=True))
+
+
+class RecommendRegistrationTest(unittest.TestCase):
+    def test_the_recommend_tool_is_always_registered(self):
+        ctx = FakeCtx()
+        plugin.register(ctx)
+        self.assertEqual(list(ctx.tools), ["followup_recommend"])
+        tool = ctx.tools["followup_recommend"]
+        self.assertEqual(tool["toolset"], "followup_chips")
+        self.assertEqual(tool["schema"]["name"], "followup_recommend")
+        self.assertEqual(tool["schema"]["parameters"]["required"], ["options"])
+
+    def test_the_rule_mentions_the_classifier_only_when_one_is_loaded(self):
+        without = FakeCtx()
+        plugin.register(without)
+        rule = without.sections[0][1]
+        self.assertNotIn("followup_recommend", rule({"platform": "local"}))
+        with_ranker = FakeCtx(plugins=["nerve"])
+        plugin.register(with_ranker)
+        rule = with_ranker.sections[0][1]
+        self.assertIn("followup_recommend", rule({"platform": "local"}))
+        self.assertNotIn("followup_recommend", rule({"platform": "telegram"}))
+
+    def test_the_owner_can_turn_recommendations_off(self):
+        ctx = FakeCtx(settings={"auto_recommend": False}, plugins=["nerve"])
+        plugin.register(ctx)
+        self.assertNotIn("followup_recommend", ctx.sections[0][1]({"platform": "local"}))
+
+    def test_a_classifier_plugin_answers_through_the_tool(self):
+        ctx = FakeCtx(plugins=["nerve"])
+        answers = {
+            "answers": {
+                "q1": {"probabilities": {"take it now": 0.81, "later": 0.1, "skip": 0.09}},
+                "q2": {"probabilities": {"take it now": 0.31, "later": 0.6, "skip": 0.09}},
+            },
+            "ok": True,
+        }
+        import json
+
+        ctx.dispatch_tool = lambda name, args, **kw: json.dumps(answers)
+        plugin.register(ctx)
+        out = ctx.tools["followup_recommend"]["handler"]({"options": ["A", "B"], "context": "x"})
+        self.assertIn('rec="1"', out)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@
 // Each qN renders as a chip; click sends it as the next user turn.
 // Add multi="1" to let several chips be picked and sent as one turn:
 //   ::followups{multi="1" q1="..." q2="..." q3="..."}
+// Add rec="1,3" (1-based q numbers) to mark the options a ranker put first:
+// those chips carry a Recommended tag and start out picked.
 import { TRANSCRIPT_DIRECTIVE_AREA, host } from '@hermes/plugin-sdk'
 import { useState, useEffect } from 'react'
 import { jsx } from 'react/jsx-runtime'
@@ -61,7 +63,7 @@ function persistChoice(key, g) {
   if (!storage) return
   try {
     const all = storage.get('choices', {}) || {}
-    all[key] = { chosen: g.chosen, picked: g.picked, sent: g.sent }
+    all[key] = { chosen: g.chosen, picked: g.picked, sent: g.sent, touched: g.touched }
     storage.set('choices', all)
   } catch (e) {
     /* persistence is best-effort */
@@ -77,6 +79,9 @@ function hydrate() {
         const v = all[key]
         if (v && typeof v === 'object') {
           const g = group(key)
+          /* A stored entry means this block has been used (or was seeded), so the
+             recommended defaults must never run over it again. */
+          g.touched = true
           if (v.chosen != null) g.chosen = v.chosen
           if (Array.isArray(v.picked)) {
             g.picked = v.picked.filter(function (n) {
@@ -95,7 +100,7 @@ function hydrate() {
 function group(key) {
   let g = groups.get(key)
   if (!g) {
-    g = { chosen: null, picked: [], sent: false, running: false, listeners: new Set() }
+    g = { chosen: null, picked: [], sent: false, touched: false, running: false, listeners: new Set() }
     groups.set(key, g)
   }
   return g
@@ -141,6 +146,33 @@ function isMulti(value) {
   return /^(1|true|yes|on)$/i.test(String(value).trim())
 }
 
+/* rec="1,3" → [0, 2]. 1-based so it lines up with the qN an agent writes; junk,
+   zero and out-of-range numbers are dropped instead of trusted. */
+function parseRec(value, count) {
+  if (value == null) return []
+  const raw = Array.isArray(value) ? value : String(value).split(/[\s,;]+/)
+  const out = []
+  raw.forEach(function (item) {
+    if (!/^\d+$/.test(String(item).trim())) return
+    const idx = parseInt(String(item).trim(), 10) - 1
+    if (idx >= 0 && idx < count && out.indexOf(idx) === -1) out.push(idx)
+  })
+  return out.sort(function (a, b) {
+    return a - b
+  })
+}
+
+const REC_MARK = {
+  fontSize: '0.85em',
+  fontWeight: 600,
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase',
+  padding: '1px 7px',
+  borderRadius: '999px',
+  whiteSpace: 'nowrap',
+  lineHeight: 1.35,
+}
+
 function Chip(props) {
   const q = props.q
   const idx = props.idx
@@ -182,6 +214,9 @@ function Chip(props) {
       title: q,
       style: {
         cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
         border: marked
           ? '1px solid color-mix(in srgb, ' + primary + ' 55%, transparent)'
           : hover
@@ -204,7 +239,19 @@ function Chip(props) {
         transition: 'border-color 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease',
       },
       children: [
-        (marked ? '✓ ' : '') + q,
+        jsx('span', { key: 'label', children: (marked ? '✓ ' : '') + q }),
+        props.recommended
+          ? jsx('span', {
+              key: 'rec',
+              style: Object.assign({}, REC_MARK, {
+                /* Darkened against the foreground so the small uppercase text clears
+                   4.5:1 on its own 10% fill (the raw accent measured 4.35:1). */
+                color: 'color-mix(in srgb, ' + primary + ' 76%, var(--foreground, #111) 24%)',
+                background: 'color-mix(in srgb, ' + primary + ' 10%, transparent)',
+              }),
+              children: 'Recommended',
+            })
+          : null,
         jsx('span', { key: 'arc', className: 'fu-arc', 'aria-hidden': 'true' }),
       ],
     },
@@ -317,6 +364,16 @@ function Chips(props) {
     })
   if (qs.length === 0) return null
 
+  const rec = parseRec(attrs.rec, qs.length)
+  /* Recommended options start picked, exactly once. A stored entry or any later
+     tick counts as touched, so a user who unticks them is never overruled by the
+     defaults coming back on the next render. */
+  const g = group(groupKey)
+  if (multi && rec.length && !g.touched && !g.sent) {
+    g.picked = rec.slice()
+    g.touched = true
+  }
+
   const picked = usePickedState(groupKey)
   const sent = sentOf(groupKey)
   const active = multi ? !sent : snapshot(groupKey) == null
@@ -384,6 +441,7 @@ function Chips(props) {
       idx: i,
       multi: multi,
       active: active,
+      recommended: rec.indexOf(i) !== -1,
       sessionKey: groupKey,
       onSend: send,
       onToggle: toggle,
