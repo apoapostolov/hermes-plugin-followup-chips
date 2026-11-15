@@ -955,18 +955,6 @@ function Chips(props) {
     })
   })
 
-  if (multi) {
-    rows.push(
-      jsx(Send, {
-        key: 'send',
-        sessionKey: groupKey,
-        count: picked.length,
-        sent: sent,
-        onSend: sendPicked,
-      })
-    )
-  }
-
   /* Older replies first, in the order they were offered: the newest reply shows
      its own proposals, then everything still unanswered above it. Each carried
      chip knows how many replies back it came from, and which block to scroll to. */
@@ -992,6 +980,21 @@ function Chips(props) {
       })
     )
   })
+
+  /* The send button closes the block, after every row it would send: a carried
+     chip sits between this reply's own options and the button that answers them,
+     so the action never appears above entries it does not send. */
+  if (multi) {
+    rows.push(
+      jsx(Send, {
+        key: 'send',
+        sessionKey: groupKey,
+        count: picked.length,
+        sent: sent,
+        onSend: sendPicked,
+      })
+    )
+  }
 
   return jsx('div', {
     /* A carried chip scrolls back here, so the block has to be findable. */

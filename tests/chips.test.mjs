@@ -539,6 +539,21 @@ test('carry: answering a block retires its own proposals', () => {
   assert.equal(next, null, 'an answered reply is not carried')
 })
 
+test('carry: the send button sits below the carried chips, not above them', () => {
+  const s = 'order-send'
+  /* multi="1" spelled out: this slice predates pickable-by-default, and the point
+     here is the order of the rows, not how the row became pickable. */
+  render(
+    register({ attrs: { carry: '1', multi: '1', q1: 'Fresh A', q2: 'Fresh B' }, sessionId: s, source: 'ord-a' })
+  )
+  const el = render(register({ attrs: { carry: '1', multi: '1', q1: 'Now A', q2: 'Now B' }, sessionId: s, source: 'ord-b' }))
+  const classes = (el.props.children || []).filter(Boolean).map(function (c) {
+    return c.props.className
+  })
+  /* This reply's own chips, then what it carries, then the button that answers them. */
+  assert.deepEqual(classes, ['fu-chip', 'fu-chip', 'fu-stale-row', 'fu-stale-row', 'fu-chip fu-send'])
+})
+
 test('carry: a block without the attribute ignores the queue', () => {
   const s = 'carry-off'
   render(register({ attrs: { carry: '1', q1: 'A' }, sessionId: s, source: 'o1' }))
