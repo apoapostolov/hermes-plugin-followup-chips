@@ -44,7 +44,7 @@ Some steps are clear at a glance and some are not: "push it" could open a PR or 
 
 The line is written by the agent, either as `subtitles` on the tool call (one entry per option, empty where none is needed) or as `dN` on the directive when it writes the chips itself. The instruction is to add one only where the label alone would be misread, so most options have none: a subtitle under every chip is noise and stops being read. It never restates the label and never sells the option.
 
-It renders at 0.82em in the secondary text colour at 0.72 opacity, and it is clipped at two wrapped lines with the full text in the chip's tooltip. Newlines and runs of spaces collapse before it reaches the chip, and anything past 160 characters is cut at a word, so a model that writes an essay cannot turn a chip into a paragraph.
+It renders at 0.82em in the secondary text colour at 0.72 opacity, aligned with the label rather than under the tick, and it is clipped at two wrapped lines with the full text in the chip's tooltip. Newlines and runs of spaces collapse before it reaches the chip, and anything past 160 characters is cut at a word, so a model that writes an essay cannot turn a chip into a paragraph.
 
 ### Risky options
 
@@ -264,7 +264,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 
 ```
 python -m unittest discover -s tests -t .   # 231 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
-node tests/chips.test.mjs                   # 77 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
+node tests/chips.test.mjs                   # 78 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
 ```
 
 ## Catalog entry (plugin-catalog/followup-chips.yaml)

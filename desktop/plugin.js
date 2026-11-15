@@ -826,23 +826,26 @@ function Chip(props) {
         props.subtitle
           ? jsx('span', {
               key: 'label',
-              /* Two lines: the label, then its clarification. The column keeps the
-                 pills on the label's line while the subtitle wraps under both. */
+              /* Two columns, so the second line starts exactly where the label does: the
+                 tick owns the first column and both the label and its clarification sit in
+                 the second. Padding or a fixed tick width drifted, because the subtitle is
+                 smaller and its em resolves against its own font size. */
               style: {
-                display: 'inline-flex',
-                flexDirection: 'column',
-                alignItems: 'stretch',
+                display: 'grid',
+                gridTemplateColumns: 'max-content minmax(0, 1fr)',
+                alignItems: 'baseline',
+                columnGap: 0,
                 minWidth: 0,
                 flex: '1 1 auto',
               },
-              children: [
+              children: labelParts(q, marked).concat([
                 jsx('span', {
-                  key: 'row',
-                  style: { display: 'inline-flex', alignItems: 'baseline', maxWidth: '100%' },
-                  children: labelParts(q, marked),
+                  key: 'sub',
+                  className: 'fu-sub',
+                  style: Object.assign({}, SUB_MARK, { gridColumn: '2' }),
+                  children: props.subtitle,
                 }),
-                jsx('span', { key: 'sub', className: 'fu-sub', style: Object.assign({}, SUB_MARK) , children: props.subtitle }),
-              ],
+              ]),
             })
           : jsx('span', {
               key: 'label',

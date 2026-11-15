@@ -145,6 +145,7 @@ function label(el) {
   }
   if (Array.isArray(inner)) {
     return inner
+      .filter((part) => !(part && part.props && part.props.className === 'fu-sub'))
       .filter((part) => !(part && part.props && part.props.style && part.props.style.visibility === 'hidden'))
       .map((part) => (part && typeof part === 'object' ? part.props.children : part))
       .join('')
@@ -1143,6 +1144,19 @@ test('subtitle: a described chip still sends its label alone', () => {
   const el = render(register({ attrs, sessionId: 'sub-6', source: 'sub-f' }))
   chips(el)[0].props.onClick()
   assert.deepEqual(submits, [['sub-6', 'Push it']], 'the message is the label, never the subtitle')
+})
+
+test('subtitle: the second line starts where the label starts, not under the tick', () => {
+  const attrs = { multi: '1', q1: 'Push it', d1: 'Rewrites origin', q2: 'Tag it' }
+  const el = render(register({ attrs, sessionId: 'sub-7', source: 'sub-g' }))
+  const chip = chips(el)[0]
+  const body = chip.props.children[0]
+  const mark = subtitle(chip)
+  assert.equal(String(body.props.style.display), 'grid', 'a grid, so the columns cannot drift')
+  assert.equal(String(body.props.style.gridTemplateColumns), 'max-content minmax(0, 1fr)')
+  assert.equal(String(mark.style.gridColumn), '2', 'the subtitle shares the label column')
+  assert.equal(body.props.children.length, 3, 'tick, label, subtitle')
+  assert.equal(label(chip), 'Push it', 'the label text is still just the label')
 })
 
 /* ---- risky options ------------------------------------------------------- */
