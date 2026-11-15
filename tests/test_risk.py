@@ -132,7 +132,11 @@ class ToolTest(unittest.TestCase):
 class AttributeTest(unittest.TestCase):
     def test_strip_removes_the_mark(self):
         text = '::followups{risky="2" multi="1" q1="A" q2="B"}'
-        self.assertEqual(offers.strip_risky(text), '::followups{ multi="1" q1="A" q2="B"}')
+        self.assertEqual(offers.strip_risky(text), '::followups{multi="1" q1="A" q2="B"}')
+
+    def test_strip_leaves_no_double_space(self):
+        text = '::followups{sid="x" risky="1" multi="1" q1="A" q2="B"}'
+        self.assertNotIn('  ', offers.strip_risky(text))
 
     def test_strip_leaves_other_attributes(self):
         text = '::followups{alt="1,2" risky="1" rec="2" q1="A" q2="B"}'

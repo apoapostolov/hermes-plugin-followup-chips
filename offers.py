@@ -382,7 +382,8 @@ def session_fingerprint(session: str) -> str:
         return ""
 
 
-RISKY_ATTR_RE = re.compile(r"risky\s*=\s*\"([^\"]*)\"")
+# The leading space goes with it, so stripping leaves one space between neighbours.
+RISKY_ATTR_RE = re.compile(r"\s*risky\s*=\s*\"[^\"]*\"")
 
 
 def strip_risky(text: str) -> str:
@@ -402,6 +403,9 @@ def strip_risky(text: str) -> str:
 
 def _without_risky(match: "re.Match[str]") -> str:
     body = RISKY_ATTR_RE.sub("", match.group(2))
+    # A mark that opened the directive leaves the space that followed it.
+    if body.startswith(" "):
+        body = body[1:]
     return match.group(1) + body + match.group(3)
 
 

@@ -247,7 +247,7 @@ Desktop-only install (chips, no prompt rule, no hook): copy `plugin.js` to `%LOC
 ## Tests
 
 ```
-python -m unittest discover -s tests -t .   # 202 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
+python -m unittest discover -s tests -t .   # 203 tests: detector, stamps, alternates, risk, recommendation, chip tool, hook, registration
 node tests/chips.test.mjs                   # 66 cases: renderer, carry queue, cleanup, alternates, risky pill, busy queue, steering, with stub SDK and React
 ```
 
