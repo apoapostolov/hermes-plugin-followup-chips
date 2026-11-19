@@ -3,15 +3,21 @@
 All notable changes to followup-chips are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); dates in Europe/Amsterdam.
 
+## [1.1.1] - 2026-11-19
+
+### Fixed
+- `otherLabel` placeholder crashed the contrib boundary (`ReferenceError: attrs is not defined`); the label now arrives via `props` and also works combined with `title`
+- Attribute names are matched case-insensitively: the app's parser lowercases every attr key (`otherLabel` arrives as `otherlabel`), so the old lookup silently missed
+
+### Note
+- v1.1.0 was tagged and released before these fixes landed on main; the tag is immutable, so both fixes ship in this patch
+
 ## [1.1.0] - 2026-11-19
 
 ### Added
 - `title` attr: optional label above the chips — next-steps / follow-up question lists now render as the directive instead of prose
 - `other="true"`: opt-in free-text row below the chips (Enter sends the text as the next turn) — for a remark that is not a chip
 - `otherLabel` attr: custom placeholder for the free-text row (language-neutral, defaults to `…`)
-
-### Fixed
-- `otherLabel` placeholder crashed the contrib boundary (`ReferenceError: attrs is not defined`); the label now arrives via `props` and also works combined with `title`
 
 ## [1.0.0] - 2026-11-12
 
