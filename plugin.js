@@ -269,27 +269,25 @@ function Chips(props) {
       })
     )
   }
-  qs.forEach(function (q, i) {
-    children.push(
-      jsx(Chip, {
-        key: String(i) + ':' + q,
-        q: q,
-        idx: i,
-        sessionKey: groupKey,
-        onSend: send,
-      })
-    )
-  })
-  if (free) {
-    children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: attrs.otherLabel || attrs.otherlabel }))
-  }
-
-  /* kind="multi": checkbox rows + one Send. kind="answer": checkbox rows with a
-     reply field each; Send composes "N. punt: antwoord" lines. Both keep the
-     one-click path untouched for plain directives. State is local to the block
-     render — no persistence needed beyond the existing group map. */
+  /* With a valid kind, the AnswerBlock IS the interface — no plain chips above
+     it (double render). Plain chips only in the default path. */
   if (kind) {
     children.push(jsx(AnswerBlock, { key: 'kindblock', kind: kind, qs: qs, groupKey: groupKey, onSendText: sendText, primary: primary }))
+  } else {
+    qs.forEach(function (q, i) {
+      children.push(
+        jsx(Chip, {
+          key: String(i) + ':' + q,
+          q: q,
+          idx: i,
+          sessionKey: groupKey,
+          onSend: send,
+        })
+      )
+    })
+  }
+  if (free && !kind) {
+    children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: attrs.otherLabel || attrs.otherlabel }))
   }
 
   return jsx('div', {
