@@ -437,7 +437,7 @@ function AnswerBlock(props) {
     rows.push(jsx('div', { key: 'row' + i, style: rowStyle, children: rowChildren }))
   })
   return jsx('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' },
+    style: { display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', maxWidth: '520px' },
     children: rows.concat([
       jsx(
         'button',
