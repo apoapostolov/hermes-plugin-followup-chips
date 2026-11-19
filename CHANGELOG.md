@@ -11,10 +11,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/); dates in Europe
 - Both are opt-in via the directive; plain `::followups{q1..qN}` behaviour is unchanged (one click sends)
 - Skill section documenting the reply-type table, the semantic (language-neutral) trigger, and the 2048-char directive body limit
 
+### Fixed
+- Send key (↵) aligns with the input column edge instead of floating at window width
+
 ## [1.1.1] - 2026-11-19
 
 ### Fixed
-- Send key (↵) aligns with the input column edge instead of floating at window width
 - `otherLabel` placeholder crashed the contrib boundary (`ReferenceError: attrs is not defined`); the label now arrives via `props` and also works combined with `title`
 - Attribute names are matched case-insensitively: the app's parser lowercases every attr key (`otherLabel` arrives as `otherlabel`), so the old lookup silently missed
 
