@@ -2,6 +2,9 @@
 // The agent ends a reply with a paragraph alone on its own line:
 //   ::followups{q1="..." q2="..." q3="..."}
 // Each qN renders as a chip; click sends it as the next user turn.
+// Optional attrs: title="Vervolgstappen" (a small label above the chips, so a
+// next-steps list needs no prose heading) and other="true" (appends one
+// free-text row for a remark the chips don't cover — same door as a chip).
 import { TRANSCRIPT_DIRECTIVE_AREA, host } from '@hermes/plugin-sdk'
 import { useState, useEffect } from 'react'
 import { jsx } from 'react/jsx-runtime'
@@ -233,6 +236,40 @@ function Chips(props) {
     }
   }
 
+  /* Optional label above the chips (e.g. "Vervolgstappen") and one free-text
+     row, both opt-in via attrs — nothing changes for a plain qN directive. */
+  const title = typeof attrs.title === 'string' && attrs.title ? attrs.title : ''
+  const free = attrs.other === 'true' || attrs.other === '1' || attrs.free === 'true'
+
+  const children = []
+  if (title) {
+    children.push(
+      jsx('div', {
+        key: 'title',
+        style: {
+          fontSize: '0.78em',
+          fontWeight: 600,
+          color: 'var(--ui-text-tertiary, var(--muted-foreground))',
+        },
+        children: title,
+      })
+    )
+  }
+  qs.forEach(function (q, i) {
+    children.push(
+      jsx(Chip, {
+        key: String(i) + ':' + q,
+        q: q,
+        idx: i,
+        sessionKey: groupKey,
+        onSend: send,
+      })
+    )
+  })
+  if (free) {
+    children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: title ? undefined : attrs.otherLabel }))
+  }
+
   return jsx('div', {
     style: {
       display: 'flex',
@@ -241,15 +278,57 @@ function Chips(props) {
       gap: '6px',
       margin: '6px 0 2px 0',
     },
-    children: qs.map(function (q, i) {
-      return jsx(Chip, {
-        key: String(i) + ':' + q,
-        q: q,
-        idx: i,
-        sessionKey: groupKey,
-        onSend: send,
-      })
-    }),
+    children: children,
+  })
+}
+
+/* Optional free-text row: a remark the chips don't cover. Typing and pressing
+   Enter uses the same door as a chip — the text becomes the next user turn. */
+function FreeText(props) {
+  const onSend = props.onSend
+  const otherLabel = typeof props.otherLabel === 'string' && props.otherLabel ? props.otherLabel : ''
+  const [value, setValue] = useState('')
+  const [hover, setHover] = useState(false)
+  const primary = 'var(--dt-primary, var(--accent, var(--foreground)))'
+  return jsx('input', {
+    type: 'text',
+    value: value,
+    placeholder: otherLabel || '…',
+    spellCheck: false,
+    onChange: function (e) {
+      setValue(e.target.value)
+    },
+    onKeyDown: function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        const text = value.trim()
+        if (text) {
+          onSend(text, null)
+          setValue('')
+        }
+      }
+    },
+    onMouseEnter: function () {
+      setHover(true)
+    },
+    onMouseLeave: function () {
+      setHover(false)
+    },
+    style: {
+      boxSizing: 'border-box',
+      width: '100%',
+      maxWidth: '420px',
+      border: hover
+        ? '1px solid color-mix(in srgb, ' + primary + ' 55%, transparent)'
+        : '1px solid var(--ui-stroke-secondary, var(--border))',
+      borderRadius: '12px',
+      background: 'transparent',
+      color: 'var(--ui-text-secondary, var(--foreground))',
+      padding: '5px 12px',
+      fontSize: '0.9em',
+      outline: 'none',
+      transition: 'border-color 160ms ease',
+    },
   })
 }
 
