@@ -1,7 +1,7 @@
 ---
 name: followup-chips
 description: Next-step chips for Hermes desktop replies.
-version: 1.0.0
+version: 1.2.0
 ---
 
 # followup-chips
@@ -11,17 +11,35 @@ End replies where a concrete next step exists with a `::followups` directive on 
 ## Rules
 
 - Syntax, alone on the last line: `::followups{q1="..." q2="..." q3="..."}` — 2–3 questions; the renderer accepts q1..qN with no hard limit, but keep it ≤5.
-- ALLE attributen — ook `title`, `other`, `otherLabel` — binnen hetzelfde accolade-paar. Alles ná de sluitende `}` wordt proza (zichtbaar als letterlijke `other=...` tekst). Volledige vorm: `::followups{title="..." q1="..." q2="..." other="true" otherLabel="..."}`.
-- Één `::followups`-directive per antwoord. Twee blokken onder elkaar is een emissiefout, geen plugin-feature.
-- Optional attrs, both opt-in: `title="Vervolgstappen"` draws a small label above the chips, `other="true"` appends one free-text row ("Anders…", Enter sends it) for a remark the chips don't cover. Use them only when they add something.
+- ALL attributes — including `title`, `other`, `otherLabel` — inside the same brace pair. Anything after the closing `}` becomes prose (visible as a literal `other=...` text). Full form: `::followups{title="..." q1="..." q2="..." other="true" otherLabel="..."}`.
+- One `::followups` directive per reply. Two stacked blocks is an emit bug, not a plugin feature.
+- Optional attrs, both opt-in: `title="Next steps"` draws a small label above the chips, `other="true"` appends one free-text row ("Other…", Enter sends it) for a remark the chips don't cover. Use them only when they add something.
 - Context-specific next steps from this conversation, never generic ("Anything else?"). Long questions wrap.
 - Skip for one-line answers, pure Q&A, and mid-task progress notes. Nothing after the directive.
 
-## "Vervolgstappen" / next-steps lists are NEVER prose
+## Reply types: kind="multi" and kind="answer" (v1.2.0)
 
-A reply that ends with a next-steps list (the model's habit: a `**Vervolgstappen**` heading + bullets) renders as dead text — the plugin only draws directives. Emit instead:
+Besides the default one-click chips, the plugin supports two interaction modes selected via the `kind` attribute. Choose based on WHAT the user must do with the items — never on language or topic; the attribute keys are language-neutral ASCII and `q`/`title` values are written in the language of the reply.
 
-`::followups{title="Vervolgstappen" q1="…" q2="…" q3="…"}`
+| End of the reply | directive | what the user sees |
+|---|---|---|
+| follow-up question, a single answer suffices | `::followups{q1="…"}` (as always) | one click sends |
+| items the user answers per item ("Concretely:", "Next steps" with choices) | `… kind="answer" title="Concretely" q1="…" q2="…"` | checkbox + reply field per item; Send posts `1. <item>: <answer>` lines |
+| items the user only selects from ("do 1 and 3") | `… kind="multi" q1="…" q2="…"` | checkboxes + one Send button |
+
+Rules:
+
+- Semantic trigger, never a literal word: "the reply ends with items the user can respond to per item" → `answer`. The lead-in phrase ("Concretely:", "Specifically") goes in `title=`, not as prose above it — otherwise it appears twice.
+- Without `kind` (or an unknown value): exactly the old one-click behaviour. Fail-safe, never a blocker.
+- In `answer`/`multi` blocks, items without typed text are sent as the bare numbered item — quick selection is never blocked.
+- Keep items short: the directive body has a hard 2048-char limit (`DIRECTIVE_BODY_MAX`); longer lists are silently truncated.
+- One interaction mode per block; do not combine `other="true"` with `kind` unless it truly adds value.
+
+## "Next steps" lists are NEVER prose
+
+A reply that ends with a next-steps list (a `**Next steps**` heading + bullets) renders as dead text — the plugin only draws directives. Emit instead:
+
+`::followups{title="Next steps" q1="…" q2="…" q3="…"}`
 
 The `title` attr IS the heading, and each item becomes a clickable option. Same for a reply that ends in follow-up questions: directive, not prose.
 
@@ -59,7 +77,7 @@ Choices survive reload via `ctx.storage` (sync, namespaced `hermes.plugin.<id>.*
 
 ## Trigger shape (test questions)
 
-Chips appear when the answer solves something and a natural next fork exists. Strong triggers: "help me X op te zetten/in te stellen", "kun je X maken", "loop X met me door", multi-step how-to. Weak (correctly NO chips): één-woord antwoorden, pure feitelijke Q&A, meningsvragen, "wat is X". Model test-recipe: nieuwe sessie + sterk-trigger vraag; geen directive na sterk antwoord = emit-discipline van dat model is het probleem, niet de plugin.
+Chips appear when the answer solves something and a natural next fork exists. Strong triggers: "help me set up X", "can you build X", "walk me through X", multi-step how-to. Weak (correctly NO chips): one-word answers, pure factual Q&A, opinion questions, "what is X". Model test-recipe: fresh session + strong-trigger question; no directive after a strong answer = that model's emit discipline is the problem, not the plugin.
 
 ## Model-agnosticism — VERIFIED grok 4.7 (nov 12)
 
@@ -67,36 +85,36 @@ Zero model/provider coupling in the plugin: the ONLY model-dependent part is the
 
 ## Deployment (both halves, every profile)
 
-Two independent halves: the plugin renders chips (user-side UI only — the agent never sees the click, it just arrives as the next user turn); the agent emits `::followups` only because THIS skill tells it to. Installing one without the other yields nothing. Each Hermes profile is its own install root, so cover `desktop-plugins/followup-chips/plugin.js` AND `skills/productivity/followup-chips/SKILL.md` in the root profile and in every `profiles/<name>/` on the host, then verify per copy by md5 (see the `hermes-agent` skill's desktop-plugins reference, "Profile fan-out"). `ctx.storage` choices are per-profile — expected, not a bug.
+Two independent halves: the plugin renders chips (user-side UI only — the agent never sees the click, it just arrives as the next user turn); the agent emits `::followups` only because THIS skill tells it to. Installing one without the other yields nothing. Each Hermes profile is its own install root, so cover `desktop-plugins/followup-chips/plugin.js` AND the skill copy in the root profile and in every `profiles/<name>/` on the host, then verify per copy by md5 (see the `hermes-agent` skill's desktop-plugins reference, "Profile fan-out"). `ctx.storage` choices are per-profile — expected, not a bug.
 
 ## Contest film pipeline
 
-See the `demo-video` skill for the reusable record → edge-tts VO → ffmpeg-montage pipeline and its pitfalls (window-rect gdigrab take, background recording job, ffprobe verify, scratch-prune warning). This plugin's winning film: 54s, window-only capture, en-US-AndrewNeural VO, 1920x1080 pillarbox. User X-handle: nuonrg.
+See the `demo-video` skill for the reusable record → edge-tts VO → ffmpeg-montage pipeline and its pitfalls (window-rect gdigrab take, background recording job, ffprobe verify, scratch-prune warning). This plugin's contest film: 54s, window-only capture, en-US-AndrewNeural VO, 1920x1080 pillarbox. User X-handle: nuonrg.
 
 ## Catalog CI quirks (learned during submission)
 
-New contributors: `Repository guards` check wants `contributors/emails/<email>` mapping file (one line: login) - add ON the PR branch as extra commit. First push after head-change may need rebase; bot may merge main into your branch (harmless). Fork PR checks sit at `action_required` until a maintainer approves workflows - just wait, optionally leave a polite PR comment pointing at the fix.
+New contributors: the `Repository guards` check wants a `contributors/emails/<email>` mapping file (one line: login) - add it ON the PR branch as an extra commit. The first push after a head-change may need a rebase; the bot may merge main into your branch (harmless). Fork PR checks sit at `action_required` until a maintainer approves workflows - just wait, optionally leave a polite PR comment pointing at the fix.
 
-## git state pitfalls (this machine)
+## git state pitfalls (the Windows host)
 
-No global git config: pass `-c user.name/-c user.email` on every commit/rebase. Worktree rebase blocks `branch -f` - use `reset --hard <sha>`. The fork at cache/scratch dies with scratch-prune; plugin repo at %LOCALAPPDATA% persists.
+No global git config: pass `-c user.name/-c user.email` on every commit/rebase. A worktree rebase blocks `branch -f` - use `reset --hard <sha>`. The fork copy inside the scratch cache dies on scratch-prune; the plugin repo under %LOCALAPPDATA% persists.
 
-## Parser les: attr-namen worden gelowercased
+## Parser lesson: attr names are lowercased
 
-De desktop parser (`parseAttrs` in transcript-directives.ts) doet `attrs[key.toLowerCase()]` — `otherLabel="x"` komt binnen als `otherlabel`. Attribuut-lookups in plugin.js moeten dus beide spellings accepteren (`attrs.otherLabel || attrs.otherlabel`) of meteen lowercase key gebruiken. camelCase-attrs zijn een stille undefined, geen error.
+The desktop parser (`parseAttrs` in transcript-directives.ts) does `attrs[key.toLowerCase()]` — `otherLabel="x"` arrives as `otherlabel`. Attribute lookups in plugin.js must accept both spellings (`attrs.otherLabel || attrs.otherlabel`) or use the lowercase key directly. camelCase attrs fail silently as undefined, no error.
 
-## Tag hygiene: nooit een gepubliceerde tag verplaatsen
+## Tag hygiene: never move a published tag
 
-Een tag met een GitHub Release eraan is immutabel. Post-release fix = patch-bump (1.1.0 blijft staan, fix wordt 1.1.1). De v1.1.0-tag is tweemaal geforceerd verplaatst tijdens de release — niet herhalen; release.sh doet tag/validate/release pas na render-verificatie.
+A tag with a GitHub Release attached is immutable. A post-release fix = patch bump (1.1.0 stays; the fix becomes 1.1.1). The v1.1.0 tag was force-moved twice during that release — do not repeat that; release.sh runs tag/validate/release only after render verification.
 
-## Release flow v2 (nov 2026) — epyc is de build-host
+## Release flow v2 (nov 2026)
 
-Projectfolder op de epyc: `~/projects/followup-chips/` — daarin `hermes-plugin-followup-chips/` (de repo), `hermes-agent-catalog/` (shallow clone van upstream voor de pin) en `release.sh` (bump → validate → push → catalog-branch → PR; gh staat in `~/.local/bin`, token via `gh auth login --with-token`). Windows blijft render/test-host: na elke release `cp` plugin.js naar `%LOCALAPPDATA%/hermes/desktop-plugins/followup-chips/` + Reload desktop plugins. v1.1.0: repo `6aff2a1`, pin-PR #157831 (netjes 1 commit, MERGEABLE), tag `v1.1.0`. Fork-main is sterk achter upstream — release.sh brancht daarom vanaf `origin/main` van upstream, niet van de fork.
+Build host: the epyc box, project dir `~/projects/followup-chips/` — containing `hermes-plugin-followup-chips/` (this repo), `hermes-agent-catalog/` (shallow clone of upstream for the pin) and `release.sh` (bump → validate → push → catalog-branch → PR; gh lives in `~/.local/bin`, token via `gh auth login --with-token`). Windows stays the render/test host: after every release copy plugin.js to `%LOCALAPPDATA%/hermes/desktop-plugins/followup-chips/` + reload desktop plugins. v1.1.0: repo `6aff2a1`, pin-PR #157831 (clean single commit, MERGEABLE), tag `v1.1.0`. The fork's main lags upstream — release.sh therefore branches from upstream's `origin/main`, not the fork.
 
 ## Contest submission (Nov 2026) — MERGED 🎉
 
-PR #154186 MERGED 12 nov 10:59 UTC door Nous in main. Plugin nu officieel catalog-listed: plugin-catalog/followup-chips.yaml op main (pins 3e44fa9, maintainer nuonrg). Installeerbaar via hermes plugins install followup-chips; docs-pagina /docs/plugins/followup-chips genereren automatisch. Repo github.com/nuonrg/hermes-plugin-followup-chips. Tweet https://x.com/nuonrg/status/2120688594129973467, form ingevuld. Contest: late entry, uitslag afwachten.
+PR #154186 merged 12 Nov 10:59 UTC by Nous into main. The plugin is officially catalog-listed: plugin-catalog/followup-chips.yaml on main (pin 3e44fa9, maintainer nuonrg). Installable via `hermes plugins install followup-chips`; the docs page /docs/plugins/followup-chips is generated automatically. Repo: github.com/nuonrg/hermes-plugin-followup-chips. Contest result: pending.
 
 ## Catalog repo layout (submission doc)
 
-Pinned tree MUST have `plugin.yaml` manifest (name/label/version/author/homepage/description/tags — cf hermes-official-plugins/accent-picker) + entrypoint at `desktop/plugin.js`. Validate first: `hermes plugins validate <dir> --install-deps`. PR adds ONE file `plugin-catalog/<name>.yaml` to NousResearch/hermes-agent; fork+branch, never direct push.
+A pinned tree MUST have a `plugin.yaml` manifest (name/label/version/author/homepage/description/tags — cf hermes-official-plugins/accent-picker) + entrypoint at `desktop/plugin.js`. Validate first: `hermes plugins validate <dir> --install-deps`. The PR adds ONE file `plugin-catalog/<name>.yaml` to NousResearch/hermes-agent; fork+branch, never push directly.

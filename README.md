@@ -58,4 +58,18 @@ Built by **@nuonrg** for the Hermes Agent Plugin Hackathon (Nous Research, Nov 2
 
 ## Agent-side pairing (skill)
 
-De plugin rendert alleen; de skill `skills/followup-chips/SKILL.md` zorgt dat de agent `::followups` emitteert. Kopieer die naar `$HERMES_HOME/skills/productivity/followup-chips/SKILL.md` (of installeer via de Hermes skill-flow) — zonder die pairing verschijnen er geen chips.
+The plugin only renders; the skill `skills/followup-chips/SKILL.md` makes the agent emit `::followups`. Copy it to `$HERMES_HOME/skills/followup-chips/SKILL.md` (or install via the Hermes skill flow) — without that pairing no chips appear.
+
+## Try it without Hermes (playground + tests)
+
+```sh
+npm install
+npm run dev        # interactive playground: every chip variant, clickable
+npm test           # headless test suite (vitest + jsdom, SDK stubbed)
+```
+
+`npm run dev` serves `demo/` — plain chips, `title`, `other`, `kind="multi"`, `kind="answer"` — with a mock composer showing exactly what would be sent. No Hermes install needed. The test suite stubs `@hermes/plugin-sdk` and asserts the composed strings per variant.
+
+## Language policy
+
+All docs, comments, commit messages and PR text in this repo are English; runtime strings (`q`/`title` values) are written by the emitting model in the language of the conversation. Keep it that way in contributions — the audience is global.

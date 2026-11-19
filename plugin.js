@@ -218,12 +218,18 @@ function Chips(props) {
     })
   if (qs.length === 0) return null
 
-  function send(q, idx) {
+  /* kind="multi": checkboxes + one send button. kind="answer": per-item reply
+     field, sent as "N. punt: antwoord" lines. No kind (or unknown): the
+     original one-click chips, unchanged. Attr keys arrive lowercase. */
+  const kindRaw = typeof attrs.kind === 'string' ? attrs.kind.toLowerCase() : ''
+  const kind = kindRaw === 'multi' || kindRaw === 'answer' ? kindRaw : ''
+  const primary = 'var(--dt-primary, var(--accent, var(--foreground)))'
+
+  function sendText(text) {
     var submit = host && host.composer && host.composer.submit
-    var sent = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, q) : false
+    var sent = typeof submit === 'function' ? submit(sessionId != null ? sessionId : null, text) : false
     if (sent) {
       const g = group(groupKey)
-      g.chosen = idx
       g.running = true
       setActive(groupKey)
       persistChoice(groupKey, g)
@@ -234,6 +240,14 @@ function Chips(props) {
     } else if (host && host.notify) {
       host.notify({ kind: 'warning', message: 'Open that chat to continue' })
     }
+    return true
+  }
+
+  function send(q, idx) {
+    const g = group(groupKey)
+    g.chosen = idx
+    persistChoice(groupKey, g)
+    return sendText(q)
   }
 
   /* Optional label above the chips (e.g. "Vervolgstappen") and one free-text
@@ -270,6 +284,14 @@ function Chips(props) {
     children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: attrs.otherLabel || attrs.otherlabel }))
   }
 
+  /* kind="multi": checkbox rows + one Send. kind="answer": checkbox rows with a
+     reply field each; Send composes "N. punt: antwoord" lines. Both keep the
+     one-click path untouched for plain directives. State is local to the block
+     render — no persistence needed beyond the existing group map. */
+  if (kind) {
+    children.push(jsx(AnswerBlock, { key: 'kindblock', kind: kind, qs: qs, groupKey: groupKey, onSendText: sendText, primary: primary }))
+  }
+
   return jsx('div', {
     style: {
       display: 'flex',
@@ -279,6 +301,148 @@ function Chips(props) {
       margin: '6px 0 2px 0',
     },
     children: children,
+  })
+}
+
+/* kind="multi" / kind="answer" block: checkbox per item, optional reply field,
+   one Send button composing "N. punt: antwoord" lines. Checked items without
+   text send the bare numbered point, so a quick select never blocks. */
+function AnswerBlock(props) {
+  const kind = props.kind
+  const qs = props.qs
+  const primary = props.primary || 'var(--dt-primary, var(--accent, var(--foreground)))'
+  const [picked, setPicked] = useState(function () {
+    return qs.map(function () {
+      return false
+    })
+  })
+  const [texts, setTexts] = useState(function () {
+    return qs.map(function () {
+      return ''
+    })
+  })
+  const anyPicked = picked.some(function (p) {
+    return p
+  })
+  if (!anyPicked) {
+    /* Nothing picked: rows are plain selectable chips - one click checks. */
+  }
+  function toggle(i) {
+    setPicked(function (prev) {
+      const next = prev.slice()
+      next[i] = !next[i]
+      return next
+    })
+  }
+  function setText(i, v) {
+    setTexts(function (prev) {
+      const next = prev.slice()
+      next[i] = v
+      return next
+    })
+  }
+  function sendAll() {
+    const lines = []
+    qs.forEach(function (q, i) {
+      if (!picked[i]) return
+      const t = (texts[i] || '').trim()
+      lines.push(String(i + 1) + '. ' + q + (t ? ': ' + t : ''))
+    })
+    if (lines.length === 0) return
+    props.onSendText(lines.join('\n'))
+  }
+  const rowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    maxWidth: '520px',
+  }
+  const boxStyle = {
+    cursor: 'pointer',
+    accentColor: primary,
+    width: '15px',
+    height: '15px',
+    flexShrink: 0,
+  }
+  const inputStyle = {
+    boxSizing: 'border-box',
+    flex: 1,
+    minWidth: 0,
+    border: '1px solid var(--ui-stroke-secondary, var(--border))',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: 'var(--ui-text-secondary, var(--foreground))',
+    padding: '4px 10px',
+    fontSize: '0.9em',
+    outline: 'none',
+  }
+  const rows = []
+  qs.forEach(function (q, i) {
+    const rowChildren = [
+      jsx('input', {
+        key: 'box',
+        type: 'checkbox',
+        checked: picked[i],
+        onChange: function () {
+          toggle(i)
+        },
+        style: boxStyle,
+      }),
+      jsx('span', {
+        key: 'label',
+        onClick: function () {
+          toggle(i)
+        },
+        style: { cursor: 'pointer', fontSize: '0.9em', color: 'var(--ui-text-secondary, var(--foreground))' },
+        children: String(i + 1) + '. ' + q,
+      }),
+    ]
+    if (kind === 'answer') {
+      rowChildren.push(
+        jsx('input', {
+          key: 'ans',
+          type: 'text',
+          value: texts[i],
+          placeholder: '…',
+          spellCheck: false,
+          onChange: function (e) {
+            setText(i, e.target.value)
+          },
+          onFocus: function () {
+            if (!picked[i]) toggle(i)
+          },
+          style: inputStyle,
+        })
+      )
+    }
+    rows.push(jsx('div', { key: 'row' + i, style: rowStyle, children: rowChildren }))
+  })
+  return jsx('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' },
+    children: rows.concat([
+      jsx(
+        'button',
+        {
+          key: 'send',
+          type: 'button',
+          onClick: sendAll,
+          disabled: !anyPicked,
+          style: {
+            cursor: anyPicked ? 'pointer' : 'default',
+            alignSelf: 'flex-start',
+            border: '1px solid ' + (anyPicked ? 'color-mix(in srgb, ' + primary + ' 55%, transparent)' : 'var(--ui-stroke-secondary, var(--border))'),
+            borderRadius: '12px',
+            background: anyPicked ? 'color-mix(in srgb, ' + primary + ' 7%, transparent)' : 'transparent',
+            color: anyPicked ? primary : 'var(--ui-text-tertiary, var(--muted-foreground))',
+            padding: '4px 14px',
+            fontSize: '0.9em',
+            opacity: anyPicked ? 1 : 0.6,
+          },
+          children: '↵',
+        },
+      ),
+    ]),
   })
 }
 

@@ -3,6 +3,14 @@
 All notable changes to followup-chips are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); dates in Europe/Amsterdam.
 
+## [1.2.0] - 2026-11-19
+
+### Added
+- `kind="multi"`: checkbox rows + one send button — compose a selection ("do 1 and 3") as the next turn
+- `kind="answer"`: checkbox + reply field per item; send composes `1. <item>: <answer>` lines — react per point without typing numbered lists
+- Both are opt-in via the directive; plain `::followups{q1..qN}` behaviour is unchanged (one click sends)
+- Skill section documenting the reply-type table, the semantic (language-neutral) trigger, and the 2048-char directive body limit
+
 ## [1.1.1] - 2026-11-19
 
 ### Fixed

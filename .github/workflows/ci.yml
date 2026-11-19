@@ -23,3 +23,18 @@ jobs:
       - name: Validate manifest is parseable YAML and pinned fields exist
         run: |
           python3 -c "import yaml; d=yaml.safe_load(open('plugin.yaml')); ks=('name','version','label','author','description'); missing=[k for k in ks if k not in d]; assert not missing, missing; print('manifest OK')"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dev deps and run the suite
+        run: |
+          npm ci
+          npm test
