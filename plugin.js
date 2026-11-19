@@ -267,7 +267,7 @@ function Chips(props) {
     )
   })
   if (free) {
-    children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: title ? undefined : attrs.otherLabel }))
+    children.push(jsx(FreeText, { key: 'free', onSend: send, otherLabel: attrs.otherLabel }))
   }
 
   return jsx('div', {
