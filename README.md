@@ -55,3 +55,7 @@ No self-updating code, no core patches, no native binaries — capabilities list
 ## Credits
 
 Built by **@nuonrg** for the Hermes Agent Plugin Hackathon (Nous Research, Nov 2026).
+
+## Agent-side pairing (skill)
+
+De plugin rendert alleen; de skill `skills/followup-chips/SKILL.md` zorgt dat de agent `::followups` emitteert. Kopieer die naar `$HERMES_HOME/skills/productivity/followup-chips/SKILL.md` (of installeer via de Hermes skill-flow) — zonder die pairing verschijnen er geen chips.

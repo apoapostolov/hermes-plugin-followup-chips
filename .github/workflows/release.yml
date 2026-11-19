@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches a CHANGELOG section
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          grep -q "## \[$TAG\]" CHANGELOG.md || { echo "CHANGELOG.md has no ## [$TAG] section"; exit 1; }
+
+      - name: Syntax-check before publishing
+        run: node --check desktop/plugin.js
+
+      - name: Extract changelog section
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          awk "/## \[$TAG\]/{f=1;next} /^## \[/{if(f)exit} f" CHANGELOG.md > /tmp/notes.md
+          cat /tmp/notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "${GITHUB_REF_NAME#v}" \
+            --notes-file /tmp/notes.md

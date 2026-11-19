@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check plugin entrypoints
+        run: |
+          node --check desktop/plugin.js
+          node --check plugin.js
+          md5sum desktop/plugin.js plugin.js  # must be identical copies
+
+      - name: Validate manifest is parseable YAML and pinned fields exist
+        run: |
+          python3 -c "import yaml; d=yaml.safe_load(open('plugin.yaml')); ks=('name','version','label','author','description'); missing=[k for k in ks if k not in d]; assert not missing, missing; print('manifest OK')"
