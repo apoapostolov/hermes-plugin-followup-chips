@@ -60,15 +60,37 @@ Built by **@nuonrg** for the Hermes Agent Plugin Hackathon (Nous Research, Nov 2
 
 The plugin only renders; the skill `skills/followup-chips/SKILL.md` makes the agent emit `::followups`. Copy it to `$HERMES_HOME/skills/followup-chips/SKILL.md` (or install via the Hermes skill flow) — without that pairing no chips appear.
 
-## Try it without Hermes (playground + tests)
+## Experience it in your own Hermes (any model)
+
+```sh
+hermes plugins install followup-chips
+```
+
+That single command installs the plugin **and** its skill for every profile — the plugin renders, the skill makes your model emit the directives. Then try each variant in any chat by asking your model to reply with exactly one of these lines:
+
+```
+::followups{title="Try me" q1="First chip?" q2="Second chip?"}
+```
+
+```
+::followups{kind="multi" title="Pick some" q1="Option A" q2="Option B" q3="Option C"}
+```
+
+```
+::followups{kind="answer" title="Your call" q1="Deploy at 16:00?" q2="Tag v1.3.0?"}
+```
+
+One click sends for the first; checkboxes + send for the second; a reply field per item for the third. Works with any model — the plugin never talks to the model, the skill does.
+
+## For contributors: preview without Hermes, tests, CI
 
 ```sh
 npm install
-npm run dev        # interactive playground: every chip variant, clickable
-npm test           # headless test suite (vitest + jsdom, SDK stubbed)
+npm run dev        # playground: every variant, clickable, mock composer log
+npm test           # headless suite (vitest + jsdom, SDK stubbed)
 ```
 
-`npm run dev` serves `demo/` — plain chips, `title`, `other`, `kind="multi"`, `kind="answer"` — with a mock composer showing exactly what would be sent. No Hermes install needed. The test suite stubs `@hermes/plugin-sdk` and asserts the composed strings per variant.
+`npm run dev` serves `demo/` — plain chips, `title`, `other`, `kind="multi"`, `kind="answer"` — showing exactly what would be sent. CI runs the suite on every push.
 
 ## Language policy
 
