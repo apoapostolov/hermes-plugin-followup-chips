@@ -14,6 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/); dates in Europe
 ## [1.1.1] - 2026-11-19
 
 ### Fixed
+- Send key (↵) aligns with the input column edge instead of floating at window width
 - `otherLabel` placeholder crashed the contrib boundary (`ReferenceError: attrs is not defined`); the label now arrives via `props` and also works combined with `title`
 - Attribute names are matched case-insensitively: the app's parser lowercases every attr key (`otherLabel` arrives as `otherlabel`), so the old lookup silently missed
 
