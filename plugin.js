@@ -351,11 +351,15 @@ function AnswerBlock(props) {
   }
   const rowStyle = {
     display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '5px',
     width: '100%',
     maxWidth: '520px',
   }
+  /* Checkbox (15px) + row gap (8px): inputs indent exactly to the label's
+     left edge, so they sit under the question, not under the checkmark. */
+  const LABEL_INDENT = '23px'
   const boxStyle = {
     cursor: 'pointer',
     accentColor: primary,
@@ -378,23 +382,33 @@ function AnswerBlock(props) {
   const rows = []
   qs.forEach(function (q, i) {
     const rowChildren = [
-      jsx('input', {
-        key: 'box',
-        type: 'checkbox',
-        checked: picked[i],
-        onChange: function () {
-          toggle(i)
+      jsx(
+        'div',
+        {
+          key: 'head',
+          style: { display: 'flex', alignItems: 'center', gap: '8px' },
+          children: [
+            jsx('input', {
+              key: 'box',
+              type: 'checkbox',
+              tabIndex: -1,
+              checked: picked[i],
+              onChange: function () {
+                toggle(i)
+              },
+              style: boxStyle,
+            }),
+            jsx('span', {
+              key: 'label',
+              onClick: function () {
+                toggle(i)
+              },
+              style: { cursor: 'pointer', fontSize: '0.9em', color: 'var(--ui-text-secondary, var(--foreground))' },
+              children: String(i + 1) + '. ' + q,
+            }),
+          ],
         },
-        style: boxStyle,
-      }),
-      jsx('span', {
-        key: 'label',
-        onClick: function () {
-          toggle(i)
-        },
-        style: { cursor: 'pointer', fontSize: '0.9em', color: 'var(--ui-text-secondary, var(--foreground))' },
-        children: String(i + 1) + '. ' + q,
-      }),
+      ),
     ]
     if (kind === 'answer') {
       rowChildren.push(
@@ -410,7 +424,13 @@ function AnswerBlock(props) {
           onFocus: function () {
             if (!picked[i]) toggle(i)
           },
-          style: inputStyle,
+          onKeyDown: function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              sendAll()
+            }
+          },
+          style: Object.assign({}, inputStyle, { marginLeft: LABEL_INDENT }),
         })
       )
     }
@@ -428,7 +448,7 @@ function AnswerBlock(props) {
           disabled: !anyPicked,
           style: {
             cursor: anyPicked ? 'pointer' : 'default',
-            alignSelf: 'flex-start',
+            alignSelf: 'flex-end',
             border: '1px solid ' + (anyPicked ? 'color-mix(in srgb, ' + primary + ' 55%, transparent)' : 'var(--ui-stroke-secondary, var(--border))'),
             borderRadius: '12px',
             background: anyPicked ? 'color-mix(in srgb, ' + primary + ' 7%, transparent)' : 'transparent',
