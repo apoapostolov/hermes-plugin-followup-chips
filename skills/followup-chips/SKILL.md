@@ -103,6 +103,10 @@ No global git config: pass `-c user.name/-c user.email` on every commit/rebase. 
 
 The desktop parser (`parseAttrs` in transcript-directives.ts) does `attrs[key.toLowerCase()]` — `otherLabel="x"` arrives as `otherlabel`. Attribute lookups in plugin.js must accept both spellings (`attrs.otherLabel || attrs.otherlabel`) or use the lowercase key directly. camelCase attrs fail silently as undefined, no error.
 
+## Release gate (VERPLICHT, nov 2026): eindtest vóór push/PR/tag
+
+Volgorde is hard: (1) eindtest in ECHTE Hermes (render-host: alle varianten — plain/title/other/multi/answer — echo-prompt + klikcheck op de samengestelde string), (2) pas dan tag op die exacte commit (nooit verplaatsen), (3) push, (4) pas daarna catalog-PR met pin op de getagde SHA. Headless CI/playground telt NIET als eindtest — die bewijst alleen string-compositie, niet de echte SDK/composer/theme. Catalog-yaml met oude SHA + nieuwe versie = inconsistency (404-end, verkeerde install); pin pas na verificatie. Geen PR openen met een ongeverifieerde pin.
+
 ## Tag hygiene: never move a published tag
 
 A tag with a GitHub Release attached is immutable. A post-release fix = patch bump (1.1.0 stays; the fix becomes 1.1.1). The v1.1.0 tag was force-moved twice during that release — do not repeat that; release.sh runs tag/validate/release only after render verification.
